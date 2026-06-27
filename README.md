@@ -1,20 +1,74 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Spirit Jar
 
-# Run and deploy your AI Studio app
+Cute ghost card battler prototype built with React, Vite, TypeScript, and Tailwind CSS.
 
-This contains everything you need to run your app locally.
+Spirit Jar is currently a single-player prototype: **Player 1 vs Spirit Lord AI**. Build a small board of ghosts, spend Psy to Manifest spirits, attack the enemy field, and break the opponent's Jar.
 
-View your app in AI Studio: https://ai.studio/apps/8025e1c4-0fb4-4cf9-b48f-6810531675df
+## Current Rules Snapshot
+
+- Player 1 always plays from the bottom of the screen.
+- Spirit Lord AI always plays from the top of the screen.
+- Each player has a Jar HP total. Reduce the enemy Jar to 0 to win.
+- Psy starts at `1/1`, increases by 1 each round, refills at the start of your turn, and caps at `10/10`.
+- Spending Psy only lowers current Psy for that turn.
+- Each player may Manifest one spirit per turn.
+- Each spirit may attack once per turn.
+- Newly Manifested spirits cannot attack until the next turn unless a card says otherwise.
+- Enemy spirits must be cleared before attacking the Enemy Jar.
+- Cat Ghost can attack spirits but cannot attack the Jar.
+- Bone Pile revives into Bones Ghost at the start of its owner's turn if it survives.
+- Burn ticks at the start of the burned unit owner's turn.
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
+Prerequisites: Node.js 20+ recommended.
 
+```bash
+npm install
+npm run dev
+```
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Then open the local URL Vite prints in your terminal.
+
+## Build
+
+```bash
+npm run build
+npm run preview
+```
+
+## Deploy to Vercel
+
+This is a standard Vite app.
+
+Recommended Vercel settings:
+
+```txt
+Framework Preset: Vite
+Install Command: npm install
+Build Command: npm run build
+Output Directory: dist
+```
+
+No environment variables are required for the current prototype.
+
+## Project Structure
+
+```txt
+src/
+  App.tsx
+  components/
+    BattleScreen.tsx
+    CardView.tsx
+    FieldUnitView.tsx
+    SetupScreen.tsx
+  data/
+    cards.ts
+  types.ts
+  utils/
+    audio.ts
+```
+
+## Notes
+
+This is a playable prototype, not a final balanced card game. The current focus is stable turn flow, readable UI, and fast iteration on card rules.

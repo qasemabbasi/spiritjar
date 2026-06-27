@@ -51,7 +51,7 @@ export function FieldUnitView({
   return (
     <div
       onClick={onClick}
-      className={`w-52 h-72 border-2 bg-[#1e1b4b] rounded-xl relative overflow-hidden select-none transition-all flex flex-col justify-between ${
+      className={`w-52 h-72 border-2 bg-[#1e1b4b] rounded-xl relative overflow-visible select-none transition-all flex flex-col justify-between group/unit ${
         isSelectedForAttack
           ? 'border-cyan-300 ring-4 ring-cyan-400 shadow-[0_0_25px_rgba(34,211,238,0.8)] scale-105 cursor-pointer z-10'
           : isTargetable
@@ -131,6 +131,21 @@ export function FieldUnitView({
           <div className="font-bold text-sm text-blue-400">
             {spirit.def < 10 ? `0${spirit.def}` : spirit.def}
           </div>
+        </div>
+      </div>
+
+      {/* Field hover helper */}
+      <div className="pointer-events-none absolute left-1/2 bottom-full z-[70] mb-2 w-56 -translate-x-1/2 rounded-xl border border-cyan-500/60 bg-slate-950/95 p-3 text-left shadow-2xl opacity-0 scale-95 transition-all group-hover/unit:opacity-100 group-hover/unit:scale-100">
+        <div className="mb-1 font-black uppercase tracking-tight text-cyan-300">{cardDef.name}</div>
+        <div className="mb-2 text-[10px] text-slate-400">
+          Current: {spirit.currentHp}/{spirit.maxHp} HP • {spirit.atk} ATK • {spirit.def} DEF
+        </div>
+        <div className="space-y-1 text-[10px] leading-tight text-slate-200">
+          {cardDef.manifestText && <div><span className="font-bold text-cyan-400">MANIFEST:</span> {cardDef.manifestText}</div>}
+          {cardDef.fieldText && <div><span className="font-bold text-indigo-300">FIELD:</span> {cardDef.fieldText}</div>}
+          {cardDef.attackText && <div><span className="font-bold text-rose-400">ATTACK:</span> {cardDef.attackText}</div>}
+          {cardDef.defeatText && <div><span className="font-bold text-slate-400">DEFEAT:</span> {cardDef.defeatText}</div>}
+          {cardDef.hasHold && <div><span className="font-bold text-amber-400">HOLD:</span> {cardDef.holdText}</div>}
         </div>
       </div>
     </div>

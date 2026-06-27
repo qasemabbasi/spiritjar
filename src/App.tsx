@@ -29,9 +29,9 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-2 sm:p-4 selection:bg-cyan-500 selection:text-slate-950 font-sans">
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-start p-2 selection:bg-cyan-500 selection:text-slate-950 font-sans">
       {/* Top Global Navigation Bar */}
-      <div className="w-full max-w-7xl flex justify-between items-center mb-3 px-2">
+      <div className="w-full max-w-[1400px] flex justify-between items-center mb-2 px-2">
         <div className="flex items-center gap-2">
           <span className="text-xl">👻</span>
           <span className="font-black tracking-tighter text-slate-200 uppercase text-sm">
@@ -75,7 +75,7 @@ export default function App() {
       </div>
 
       {/* Footer info */}
-      <div className="mt-4 text-[11px] font-mono text-slate-600 text-center max-w-7xl">
+      <div className="mt-1 text-[10px] font-mono text-slate-700 text-center max-w-[1400px]">
         Single Player Prototype • Player 1 vs Spirit Lord AI • Reactive Hold Mechanics
       </div>
     </div>

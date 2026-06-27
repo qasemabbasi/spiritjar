@@ -903,10 +903,10 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     return def && def.hasHold && def.holdTrigger === reactionContext.trigger;
   };
 
-  const unitCardClass = '!w-36 !h-48 sm:!w-40 sm:!h-52';
+  const unitCardClass = '!w-32 !h-44 lg:!w-36 lg:!h-48';
 
   return (
-    <div className="flex flex-col h-[calc(100vh-92px)] min-h-[640px] max-h-[900px] w-full max-w-[1180px] mx-auto bg-[#0f172a] text-slate-100 font-sans overflow-hidden border-4 sm:border-8 border-[#1e293b] rounded-2xl shadow-2xl relative select-none">
+    <div className="flex flex-col h-[calc(100vh-64px)] min-h-[620px] max-h-[920px] w-full max-w-[1400px] mx-auto bg-[#0f172a] text-slate-100 font-sans overflow-hidden border-4 sm:border-8 border-[#1e293b] rounded-2xl shadow-2xl relative select-none">
       {winner && (
         <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-8 animate-fade-in">
           <div className="text-8xl mb-4 animate-bounce">🏆</div>
@@ -960,9 +960,9 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         </div>
       </div>
 
-      <div className="relative flex-1 grid grid-cols-[1fr_240px] xl:grid-cols-[1fr_270px] p-3 gap-3 overflow-hidden">
+      <div className="relative flex-1 grid grid-cols-[1fr_220px] xl:grid-cols-[1fr_240px] p-2 gap-2 overflow-hidden">
         <div className="flex flex-col justify-between overflow-hidden pr-1 gap-2">
-          <div className="flex justify-center items-center gap-4 shrink-0">
+          <div className="flex justify-center items-center gap-3 shrink-0">
             <JarTarget
               label="Enemy Jar"
               hp={computerPlayer.jarHp}
@@ -971,7 +971,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
               isClickable={humanCanAct && phase === 'attack' && canAttackEnemyJar}
               onClick={() => handleTargetClick(undefined, true)}
             />
-            <div className="flex justify-center gap-3 items-center">
+            <div className="flex justify-center gap-2 items-center">
               {[0, 1, 2].map(slotIdx => {
                 const unit = computerPlayer.field[slotIdx];
                 const canBeTargeted = !!(
@@ -997,9 +997,9 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
             </div>
           </div>
 
-          <div className="flex justify-center items-center gap-8 py-1 shrink-0">
+          <div className="flex justify-center items-center gap-6 py-0 shrink-0">
             <div className="text-center group">
-              <div className="w-20 h-28 bg-[#312e81] rounded-lg border-2 border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.5)] flex flex-col items-center justify-center relative transition-transform group-hover:scale-105">
+              <div className="w-16 h-24 bg-[#312e81] rounded-lg border-2 border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.5)] flex flex-col items-center justify-center relative transition-transform group-hover:scale-105">
                 <div className="text-3xl">🏺</div>
                 <div className="absolute -top-3 -right-3 w-7 h-7 rounded-full bg-cyan-500 flex items-center justify-center font-black text-xs text-slate-950 shadow">
                   {sharedDeck.length}
@@ -1009,7 +1009,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
             </div>
 
             <div className="text-center group">
-              <div className="w-20 h-28 bg-slate-900 rounded-lg border-2 border-slate-700 flex flex-col items-center justify-center grayscale opacity-70 transition-opacity group-hover:opacity-100">
+              <div className="w-16 h-24 bg-slate-900 rounded-lg border-2 border-slate-700 flex flex-col items-center justify-center grayscale opacity-70 transition-opacity group-hover:opacity-100">
                 <div className="text-3xl">💀</div>
                 <div className="text-[10px] font-mono text-slate-400 mt-1">{discardPile.length}</div>
               </div>
@@ -1017,9 +1017,9 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
             </div>
           </div>
 
-          <div className="flex justify-center items-center gap-4 shrink-0">
+          <div className="flex justify-center items-center gap-3 shrink-0">
             <JarTarget label="Your Jar" hp={humanPlayer.jarHp} maxHp={STARTING_JAR_HP} owner="player" />
-            <div className="flex justify-center gap-3 items-center">
+            <div className="flex justify-center gap-2 items-center">
               {[0, 1, 2].map(slotIdx => {
                 const unit = humanPlayer.field[slotIdx];
                 const isEligibleAttacker = !!(humanCanAct && phase === 'attack' && unit && getValidAttackers(humanPlayer, computerPlayer).some(attacker => attacker.instanceId === unit.instanceId));
@@ -1182,8 +1182,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         </div>
       </div>
 
-      <div className="h-48 sm:h-52 bg-[#1e1b4b] border-t-2 border-cyan-500 p-3 flex gap-3 items-end shrink-0">
-        <div className="flex-1 flex justify-center gap-2 overflow-x-auto pt-4 px-2 pb-2">
+      <div className="h-44 bg-[#1e1b4b] border-t-2 border-cyan-500 p-2 flex gap-2 items-end shrink-0">
+        <div className="flex-1 flex justify-center gap-2 overflow-x-auto overflow-y-visible pt-4 px-2 pb-1">
           {humanPlayer.hand.length === 0 ? (
             <div className="text-slate-500 italic text-xs self-center pb-8">No cards in hand. Draw on next turn.</div>
           ) : (
@@ -1221,14 +1221,15 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
                   }}
                   onHoldClick={() => usableInReaction && playHoldCard(cardInst)}
                   disabledReason={!canPlayManifest && !usableInReaction ? disabledReason : undefined}
-                  className="!w-36 !h-44 sm:!w-40 sm:!h-48 text-[10px]"
+                  className="!w-32 !h-40 lg:!w-36 lg:!h-44 text-[10px]"
+                  compact
                 />
               );
             })
           )}
         </div>
 
-        <div className="flex flex-col items-center justify-center p-3 bg-indigo-950/80 rounded-xl border border-cyan-500/30 ml-auto w-40 shadow-lg shrink-0 mb-2">
+        <div className="flex flex-col items-center justify-center p-2 bg-indigo-950/80 rounded-xl border border-cyan-500/30 ml-auto w-36 shadow-lg shrink-0 mb-1">
           <div className="flex gap-4 mb-2">
             <div className="text-center font-mono">
               <div className="text-[9px] uppercase tracking-wider text-slate-400">Jar HP</div>
