@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { CardInstance, FieldSpirit, PlayerState, TurnPhase, GameLogEntry, ReactionContext } from '../types';
+import { CardDefinition, CardInstance, FieldSpirit, PlayerState, TurnPhase, GameLogEntry, ReactionContext } from '../types';
 import { BASE_CARDS } from '../data/cards';
 import { CardView } from './CardView';
 import { FieldUnitView } from './FieldUnitView';
@@ -102,6 +102,44 @@ function getBestAiTarget(attacker: FieldSpirit, enemy: PlayerState): FieldSpirit
   })[0];
 }
 
+
+function CardDetailPreview({ card }: { card: CardDefinition | null }) {
+  if (!card) return null;
+
+  return (
+    <div className="pointer-events-none absolute left-1/2 bottom-[9.25rem] z-[120] w-[min(420px,calc(100%-2rem))] -translate-x-1/2 rounded-2xl border-2 border-cyan-400/80 bg-slate-950/98 p-4 text-left shadow-[0_0_45px_rgba(34,211,238,0.45)]">
+      <div className="mb-2 flex items-start justify-between gap-4 border-b border-slate-800 pb-2">
+        <div>
+          <div className="text-lg font-black uppercase tracking-tight text-cyan-300">{card.name}</div>
+          {card.keywords.length > 0 && (
+            <div className="mt-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+              {card.keywords.join(' • ')}
+            </div>
+          )}
+        </div>
+        <div className="rounded-full bg-cyan-500 px-3 py-1 text-sm font-black text-slate-950 shadow">{card.cost} Psy</div>
+      </div>
+
+      <div className="mb-3 grid grid-cols-3 rounded-xl border border-indigo-800/70 bg-indigo-950/70 py-2 text-center font-mono text-sm">
+        <div><span className="font-black text-emerald-400">{card.hp}</span><span className="ml-1 text-slate-500">HP</span></div>
+        <div><span className="font-black text-orange-400">{card.atk}</span><span className="ml-1 text-slate-500">ATK</span></div>
+        <div><span className="font-black text-blue-400">{card.def}</span><span className="ml-1 text-slate-500">DEF</span></div>
+      </div>
+
+      <div className="space-y-2 text-[12px] leading-snug text-slate-200">
+        {card.manifestText && <div><span className="font-black text-cyan-400">MANIFEST:</span> {card.manifestText}</div>}
+        {card.fieldText && <div><span className="font-black text-indigo-300">FIELD:</span> {card.fieldText}</div>}
+        {card.attackText && <div><span className="font-black text-rose-400">ATTACK:</span> {card.attackText}</div>}
+        {card.defeatText && <div><span className="font-black text-slate-400">DEFEAT:</span> {card.defeatText}</div>}
+        {card.hasHold && <div><span className="font-black text-amber-400">HOLD:</span> {card.holdText}</div>}
+        {!card.manifestText && !card.fieldText && !card.attackText && !card.defeatText && !card.hasHold && (
+          <div className="text-slate-400">No special rules.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function JarTarget({
   label,
   hp,
@@ -122,7 +160,7 @@ function JarTarget({
       type="button"
       onClick={isClickable ? onClick : undefined}
       disabled={!isClickable}
-      className={`w-28 h-28 rounded-2xl border-2 flex flex-col items-center justify-center shrink-0 transition-all ${
+      className={`w-24 h-24 rounded-2xl border-2 flex flex-col items-center justify-center shrink-0 transition-all ${
         isClickable
           ? 'bg-rose-600/30 border-rose-300 ring-4 ring-rose-400/70 shadow-[0_0_28px_rgba(244,63,94,0.65)] cursor-pointer hover:scale-105 animate-pulse'
           : owner === 'enemy'
@@ -130,9 +168,9 @@ function JarTarget({
           : 'bg-cyan-950/60 border-cyan-500/50'
       }`}
     >
-      <div className="text-4xl leading-none">🏺</div>
+      <div className="text-3xl leading-none">🏺</div>
       <div className="text-[9px] uppercase tracking-widest font-black text-slate-300 mt-1">{label}</div>
-      <div className="text-2xl font-black font-mono text-rose-400">
+      <div className="text-xl font-black font-mono text-rose-400">
         {hp < 10 ? `0${hp}` : hp}<span className="text-xs opacity-50">/{maxHp}</span>
       </div>
     </button>
@@ -177,6 +215,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
   ]);
 
   const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
+  const [hoveredCard, setHoveredCard] = useState<CardDefinition | null>(null);
   const [selectedAttackerId, setSelectedAttackerId] = useState<string | null>(null);
   const [reactionContext, setReactionContext] = useState<ReactionContext | null>(null);
   const [log, setLog] = useState<GameLogEntry[]>([]);
@@ -903,10 +942,10 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     return def && def.hasHold && def.holdTrigger === reactionContext.trigger;
   };
 
-  const unitCardClass = '!w-32 !h-44 lg:!w-36 lg:!h-48';
+  const unitCardClass = '!w-28 !h-40 lg:!w-32 lg:!h-44';
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)] min-h-[620px] max-h-[920px] w-full max-w-[1400px] mx-auto bg-[#0f172a] text-slate-100 font-sans overflow-hidden border-4 sm:border-8 border-[#1e293b] rounded-2xl shadow-2xl relative select-none">
+    <div className="flex flex-col h-[calc(100vh-64px)] min-h-[620px] max-h-[920px] w-full max-w-[1500px] mx-auto bg-[#0f172a] text-slate-100 font-sans overflow-hidden border-4 sm:border-8 border-[#1e293b] rounded-2xl shadow-2xl relative select-none">
       {winner && (
         <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-8 animate-fade-in">
           <div className="text-8xl mb-4 animate-bounce">🏆</div>
@@ -960,9 +999,9 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         </div>
       </div>
 
-      <div className="relative flex-1 grid grid-cols-[1fr_220px] xl:grid-cols-[1fr_240px] p-2 gap-2 overflow-hidden">
+      <div className="relative flex-1 grid grid-cols-[1fr_210px] xl:grid-cols-[1fr_230px] p-2 gap-2 overflow-hidden">
         <div className="flex flex-col justify-between overflow-hidden pr-1 gap-2">
-          <div className="flex justify-center items-center gap-3 shrink-0">
+          <div className="flex justify-center items-center gap-2 shrink-0">
             <JarTarget
               label="Enemy Jar"
               hp={computerPlayer.jarHp}
@@ -1017,7 +1056,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
             </div>
           </div>
 
-          <div className="flex justify-center items-center gap-3 shrink-0">
+          <div className="flex justify-center items-center gap-2 shrink-0">
             <JarTarget label="Your Jar" hp={humanPlayer.jarHp} maxHp={STARTING_JAR_HP} owner="player" />
             <div className="flex justify-center gap-2 items-center">
               {[0, 1, 2].map(slotIdx => {
@@ -1182,8 +1221,10 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         </div>
       </div>
 
-      <div className="h-44 bg-[#1e1b4b] border-t-2 border-cyan-500 p-2 flex gap-2 items-end shrink-0">
-        <div className="flex-1 flex justify-center gap-2 overflow-x-auto overflow-y-visible pt-4 px-2 pb-1">
+      <CardDetailPreview card={hoveredCard} />
+
+      <div className="h-36 bg-[#1e1b4b] border-t-2 border-cyan-500 p-2 flex gap-2 items-end shrink-0">
+        <div className="flex-1 flex justify-center gap-2 overflow-x-auto overflow-y-hidden pt-1 px-2 pb-1">
           {humanPlayer.hand.length === 0 ? (
             <div className="text-slate-500 italic text-xs self-center pb-8">No cards in hand. Draw on next turn.</div>
           ) : (
@@ -1209,21 +1250,29 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
               else if (humanPlayer.hasManifestedThisTurn) disabledReason = 'Already Manifested 1 spirit this turn';
 
               return (
-                <CardView
+                <div
                   key={cardInst.instanceId}
-                  card={def}
-                  canManifest={canPlayManifest}
-                  isHoldReady={usableInReaction}
-                  onClick={() => {
-                    if (usableInReaction) playHoldCard(cardInst);
-                    else if (canPlayManifest) manifestCard(cardInst);
-                    setSelectedHandCardId(cardInst.instanceId);
-                  }}
-                  onHoldClick={() => usableInReaction && playHoldCard(cardInst)}
-                  disabledReason={!canPlayManifest && !usableInReaction ? disabledReason : undefined}
-                  className="!w-32 !h-40 lg:!w-36 lg:!h-44 text-[10px]"
-                  compact
-                />
+                  onMouseEnter={() => setHoveredCard(def)}
+                  onMouseLeave={() => setHoveredCard(null)}
+                  onFocus={() => setHoveredCard(def)}
+                  onBlur={() => setHoveredCard(null)}
+                  className="shrink-0"
+                >
+                  <CardView
+                    card={def}
+                    canManifest={canPlayManifest}
+                    isHoldReady={usableInReaction}
+                    onClick={() => {
+                      if (usableInReaction) playHoldCard(cardInst);
+                      else if (canPlayManifest) manifestCard(cardInst);
+                      setSelectedHandCardId(cardInst.instanceId);
+                    }}
+                    onHoldClick={() => usableInReaction && playHoldCard(cardInst)}
+                    disabledReason={!canPlayManifest && !usableInReaction ? disabledReason : undefined}
+                    className="!w-28 !h-32 lg:!w-32 lg:!h-[8.5rem] text-[9px]"
+                    compact
+                  />
+                </div>
               );
             })
           )}

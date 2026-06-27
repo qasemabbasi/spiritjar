@@ -58,7 +58,7 @@ export function CardView({
   showBadge,
   compact = false
 }: CardViewProps) {
-  const cardWidthHeight = compact ? 'w-36 h-44 text-[10px]' : 'w-56 h-80 text-sm';
+  const cardWidthHeight = compact ? 'w-28 h-36 text-[9px]' : 'w-56 h-80 text-sm';
   const titleText = disabledReason ? `${card.name} — ${disabledReason}` : card.name;
 
   return (
@@ -75,7 +75,7 @@ export function CardView({
         } rounded-xl relative shadow-2xl transition-all flex flex-col select-none ${className}`}
       >
         {/* Cost Badge */}
-        <div className="absolute top-2 left-2 w-7 h-7 rounded-full bg-cyan-500 flex items-center justify-center font-bold text-xs text-slate-950 shadow-md z-10">
+        <div className={`${compact ? 'top-1.5 left-1.5 w-6 h-6 text-[10px]' : 'top-2 left-2 w-7 h-7 text-xs'} absolute rounded-full bg-cyan-500 flex items-center justify-center font-bold text-slate-950 shadow-md z-10`}>
           {card.cost}
         </div>
 
@@ -92,21 +92,21 @@ export function CardView({
         )}
 
         {/* Card Content */}
-        <div className={`${compact ? 'p-2 pt-3' : 'p-3 pt-4'} flex flex-col h-full justify-between`}>
+        <div className={`${compact ? 'p-1.5 pt-2' : 'p-3 pt-4'} flex flex-col h-full justify-between`}>
           {/* Title */}
-          <div className="font-bold text-center uppercase tracking-tighter text-slate-100 truncate pl-6 pr-1">
+          <div className={`${compact ? 'text-[10px] pl-6 pr-0' : 'pl-6 pr-1'} font-bold text-center uppercase tracking-tighter text-slate-100 truncate`}>
             {card.name}
           </div>
 
           {/* Ghost Art Area */}
-          <div className={`${compact ? 'h-20' : 'h-28'} my-1 bg-indigo-950/80 rounded-lg flex items-center justify-center relative overflow-hidden border border-indigo-800/50`}>
+          <div className={`${compact ? 'h-12' : 'h-28'} my-1 bg-indigo-950/80 rounded-lg flex items-center justify-center relative overflow-hidden border border-indigo-800/50`}>
             <div className={`absolute inset-0 bg-gradient-to-br ${card.themeColor} opacity-40`} />
-            <GhostIcon artKey={card.artKey} className={`${compact ? 'w-16 h-16' : 'w-20 h-20'} z-10 transition-transform group-hover/card:scale-110`} />
+            <GhostIcon artKey={card.artKey} className={`${compact ? 'w-11 h-11' : 'w-20 h-20'} z-10 transition-transform group-hover/card:scale-110`} />
           </div>
 
           {/* Keywords Row */}
           {card.keywords.length > 0 && (
-            <div className="flex flex-wrap gap-1 justify-center my-0.5 min-h-[18px]">
+            <div className={`${compact ? 'scale-90 -my-0.5' : 'my-0.5 min-h-[18px]'} flex flex-wrap gap-1 justify-center`}>
               {card.keywords.map(kw => (
                 <KeywordChip key={kw} keyword={kw} size="sm" />
               ))}
@@ -114,7 +114,7 @@ export function CardView({
           )}
 
           {/* Stats Row */}
-          <div className="grid grid-cols-3 text-center my-1 bg-black/40 rounded py-1 border border-slate-800 font-mono">
+          <div className={`${compact ? 'my-0.5 py-0.5' : 'my-1 py-1'} grid grid-cols-3 text-center bg-black/40 rounded border border-slate-800 font-mono`}>
             <div>
               <div className="text-[11px] font-bold text-emerald-400">{card.hp}</div>
               <div className="text-[7px] text-slate-400 uppercase tracking-wider">HP</div>
@@ -131,8 +131,8 @@ export function CardView({
 
           {/* Text Area */}
           {compact ? (
-            <div className="text-[8px] leading-tight bg-indigo-950/60 p-1.5 rounded border border-indigo-900/40 text-slate-300 h-8 overflow-hidden">
-              Hover for full rules
+            <div className="text-[7.5px] leading-tight bg-indigo-950/60 px-1.5 py-1 rounded border border-indigo-900/40 text-slate-400 h-5 overflow-hidden text-center">
+              Hover details
             </div>
           ) : (
             <div className="text-[8.5px] leading-tight bg-indigo-950/60 p-1.5 rounded flex-1 overflow-y-auto border border-indigo-900/40 text-slate-200">
@@ -165,22 +165,6 @@ export function CardView({
         )}
       </div>
 
-      {/* Full hover rules preview for compact hand cards */}
-      {compact && (
-        <div className="pointer-events-none absolute left-1/2 bottom-full z-[80] mb-3 w-64 -translate-x-1/2 rounded-xl border-2 border-cyan-500/70 bg-slate-950/95 p-3 text-left shadow-[0_0_35px_rgba(34,211,238,0.35)] opacity-0 scale-95 transition-all duration-150 group-hover/card:opacity-100 group-hover/card:scale-100">
-          <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2 mb-2">
-            <div className="font-black uppercase tracking-tight text-cyan-300">{card.name}</div>
-            <div className="rounded-full bg-cyan-500 px-2 py-0.5 text-xs font-black text-slate-950">{card.cost} Psy</div>
-          </div>
-          <div className="mb-2 grid grid-cols-3 rounded bg-indigo-950/70 py-1 text-center font-mono text-xs">
-            <div><span className="text-emerald-400 font-bold">{card.hp}</span><span className="ml-1 text-slate-500">HP</span></div>
-            <div><span className="text-orange-400 font-bold">{card.atk}</span><span className="ml-1 text-slate-500">ATK</span></div>
-            <div><span className="text-blue-400 font-bold">{card.def}</span><span className="ml-1 text-slate-500">DEF</span></div>
-          </div>
-          <CardRulesText card={card} compact />
-          {disabledReason && <div className="mt-2 rounded bg-rose-950/60 p-2 text-[10px] font-bold text-rose-300">{disabledReason}</div>}
-        </div>
-      )}
     </div>
   );
 }
