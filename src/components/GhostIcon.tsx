@@ -117,6 +117,40 @@ export function GhostIcon({ artKey, className = "w-24 h-24" }: GhostIconProps) {
           <path d="M 44 70 Q 50 73, 56 70" fill="none" stroke="#334155" strokeWidth="3" strokeLinecap="round" />
         </svg>
       );
+    case 'sword_ghost':
+      return (
+        <svg viewBox="0 0 100 100" className={className}>
+          <path d="M 28 58 C 28 30, 70 30, 70 58 L 70 85 Q 60 78, 50 85 Q 40 78, 28 85 Z" fill="#bae6fd" stroke="#0ea5e9" strokeWidth="4" />
+          <circle cx="42" cy="47" r="3.5" fill="#0c4a6e" />
+          <circle cx="56" cy="47" r="3.5" fill="#0c4a6e" />
+          <path d="M 42 57 Q 50 62, 58 57" fill="none" stroke="#0c4a6e" strokeWidth="3" strokeLinecap="round" />
+          <path d="M 70 20 L 84 34 L 45 73 L 31 59 Z" fill="#e0f2fe" stroke="#0369a1" strokeWidth="3" />
+          <path d="M 62 42 L 76 56" stroke="#0c4a6e" strokeWidth="5" strokeLinecap="round" />
+        </svg>
+      );
+    case 'bomb_ghost':
+      return (
+        <svg viewBox="0 0 100 100" className={className}>
+          <path d="M 30 60 C 30 34, 70 34, 70 60 L 70 84 Q 60 77, 50 84 Q 40 77, 30 84 Z" fill="#fde68a" stroke="#f59e0b" strokeWidth="4" />
+          <circle cx="42" cy="50" r="4" fill="#7c2d12" />
+          <circle cx="58" cy="50" r="4" fill="#7c2d12" />
+          <path d="M 44 61 Q 50 55, 56 61" fill="none" stroke="#7c2d12" strokeWidth="3" strokeLinecap="round" />
+          <circle cx="70" cy="28" r="13" fill="#111827" stroke="#f97316" strokeWidth="3" />
+          <path d="M 72 16 Q 76 8, 84 9" fill="none" stroke="#fbbf24" strokeWidth="4" strokeLinecap="round" />
+          <path d="M 84 9 L 88 4 M 86 13 L 94 14" stroke="#facc15" strokeWidth="3" strokeLinecap="round" />
+        </svg>
+      );
+    case 'ritual_ghost':
+      return (
+        <svg viewBox="0 0 100 100" className={className}>
+          <path d="M 22 58 C 22 24, 78 24, 78 58 L 78 88 Q 64 78, 50 88 Q 36 78, 22 88 Z" fill="#ddd6fe" stroke="#8b5cf6" strokeWidth="4" />
+          <circle cx="41" cy="48" r="4" fill="#4c1d95" />
+          <circle cx="59" cy="48" r="4" fill="#4c1d95" />
+          <path d="M 42 61 Q 50 68, 58 61" fill="none" stroke="#4c1d95" strokeWidth="3" strokeLinecap="round" />
+          <circle cx="50" cy="24" r="16" fill="none" stroke="#c084fc" strokeWidth="4" />
+          <path d="M 50 8 L 56 24 L 72 24 L 59 33 L 64 49 L 50 39 L 36 49 L 41 33 L 28 24 L 44 24 Z" fill="#a855f7" opacity="0.75" />
+        </svg>
+      );
     case 'bone_pile_token':
       return (
         <svg viewBox="0 0 100 100" className={className}>

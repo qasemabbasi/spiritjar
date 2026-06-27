@@ -15,7 +15,7 @@ const KEYWORD_INFO: Record<Keyword, { label: string; color: string; desc: string
   burn: {
     label: 'BURN',
     color: 'bg-red-500/20 text-red-300 border-red-400/40',
-    desc: 'Takes 1 damage at End phase, then Burn is removed.'
+    desc: 'At owner start, takes Burn damage. Burn then decays by 1.'
   },
   splash: {
     label: 'SPLASH',
@@ -46,6 +46,21 @@ const KEYWORD_INFO: Record<Keyword, { label: string; color: string; desc: string
     label: 'TOKEN',
     color: 'bg-cyan-500/20 text-cyan-300 border-cyan-400/40',
     desc: 'Disappears when defeated instead of entering discard pile.'
+  },
+  boom: {
+    label: 'BOOM',
+    color: 'bg-yellow-500/20 text-yellow-300 border-yellow-400/40',
+    desc: 'Explodes on Manifest and clears non-Cat spirits.'
+  },
+  strike: {
+    label: 'STRIKE',
+    color: 'bg-sky-500/20 text-sky-300 border-sky-400/40',
+    desc: 'High-attack anti-tank spirit.'
+  },
+  ritual: {
+    label: 'RITUAL',
+    color: 'bg-purple-500/20 text-purple-300 border-purple-400/40',
+    desc: 'Requires sacrificing friendly spirits to Manifest.'
   }
 };
 

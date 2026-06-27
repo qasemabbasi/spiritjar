@@ -9,7 +9,7 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
     atk: 1,
     def: 1,
     keywords: [],
-    manifestText: 'Big Body.',
+    manifestText: 'Big Body. Hard to chop down without Sword, Burn, or Bomb.',
     fieldText: '',
     attackText: '',
     defeatText: '',
@@ -102,11 +102,11 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
     atk: 1,
     def: 1,
     keywords: [],
-    manifestText: 'Restore 2 Jar HP.',
-    fieldText: 'At end of your turn, restore 1 Jar HP if you control another spirit.',
+    manifestText: 'Restore 2 HP to your most damaged friendly spirit. If all are healthy, restore your Jar.',
+    fieldText: 'At end of your turn, restore 1 HP to your most damaged friendly spirit.',
     attackText: '',
-    defeatText: '',
-    holdText: 'When your Jar takes damage, restore 2 Jar HP after damage.',
+    defeatText: 'When destroyed, gain +1 bonus Psy next turn.',
+    holdText: 'When your Jar takes damage, restore 2 Jar HP before damage lands.',
     holdTrigger: 'when_jar_damaged',
     hasHold: true,
     token: false,
@@ -123,9 +123,9 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
     keywords: ['burn'],
     manifestText: '',
     fieldText: '',
-    attackText: 'Hits apply Burn 1.',
+    attackText: 'Hits apply Burn 2. Burn stacks up to 4.',
     defeatText: '',
-    holdText: 'When an enemy spirit attacks, apply Burn 1 to it.',
+    holdText: 'When an enemy spirit attacks, apply Burn 2 to it.',
     holdTrigger: 'when_enemy_attacks',
     hasHold: true,
     token: false,
@@ -150,6 +150,67 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
     token: false,
     artKey: 'bones_ghost',
     themeColor: 'from-slate-400/20 to-zinc-600/30 border-slate-300/50'
+  },
+
+  sword_ghost: {
+    id: 'sword_ghost',
+    name: 'Sword Ghost',
+    cost: 3,
+    hp: 2,
+    atk: 4,
+    def: 0,
+    keywords: ['strike'],
+    manifestText: '',
+    fieldText: '',
+    attackText: 'High attack. Built to cut through big spirits.',
+    defeatText: '',
+    holdText: 'React: Give your strongest friendly spirit +2 ATK.',
+    holdTrigger: 'react_phase',
+    hasHold: true,
+    token: false,
+    role: 'Fragile anti-tank attacker and attack buff Hold.',
+    artKey: 'sword_ghost',
+    themeColor: 'from-sky-500/20 to-blue-700/30 border-sky-300/50'
+  },
+  bomb_ghost: {
+    id: 'bomb_ghost',
+    name: 'Bomb Ghost',
+    cost: 5,
+    hp: 1,
+    atk: 0,
+    def: 0,
+    keywords: ['boom'],
+    manifestText: 'Explode immediately. Destroy all non-Cat spirits on both fields. Does not damage Jars.',
+    fieldText: '',
+    attackText: '',
+    defeatText: '',
+    holdText: 'When an enemy attacks, destroy the attacking spirit. Cat Ghosts are unaffected.',
+    holdTrigger: 'when_enemy_attacks',
+    hasHold: true,
+    token: false,
+    role: 'Full board reset or single-target reaction removal.',
+    artKey: 'bomb_ghost',
+    themeColor: 'from-yellow-500/20 to-red-700/30 border-yellow-300/50'
+  },
+  ritual_ghost: {
+    id: 'ritual_ghost',
+    name: 'Ritual Ghost',
+    cost: 5,
+    hp: 7,
+    atk: 5,
+    def: 1,
+    keywords: ['ritual'],
+    manifestText: 'Sacrifice 2 friendly spirits to Manifest this huge ghost.',
+    fieldText: '',
+    attackText: '',
+    defeatText: '',
+    holdText: 'React: Resummon your last destroyed non-token ghost if you have field space.',
+    holdTrigger: 'react_phase',
+    hasHold: true,
+    token: false,
+    role: 'Big payoff for Wisps and small ghosts; revive Hold.',
+    artKey: 'ritual_ghost',
+    themeColor: 'from-purple-500/20 to-fuchsia-800/30 border-purple-300/50'
   },
   bone_pile_token: {
     id: 'bone_pile_token',
@@ -191,44 +252,49 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
 };
 
 export const COLLECTIBLE_CARD_IDS = [
-  'fat_ghost',
-  'lantern_ghost',
-  'loud_ghost',
-  'soldier_ghost',
-  'old_ghost',
+  'cat_ghost',
   'flame_ghost',
+  'soldier_ghost',
+  'lantern_ghost',
+  'old_ghost',
+  'sword_ghost',
+  'loud_ghost',
   'bones_ghost',
-  'cat_ghost'
+  'fat_ghost',
+  'bomb_ghost',
+  'ritual_ghost'
 ];
 
 // Generate a standard 20-card collection for a player
 export function getStandardPlayerCollection(): string[] {
-  // 8 unique collectible cards x 2 = 16 cards + 4 extra standard ones
+  // Two copies of each collectible ghost for prototype deckbuilding.
   return [
-    'fat_ghost', 'fat_ghost',
-    'lantern_ghost', 'lantern_ghost',
-    'loud_ghost', 'loud_ghost',
-    'soldier_ghost', 'soldier_ghost',
-    'old_ghost', 'old_ghost',
-    'flame_ghost', 'flame_ghost',
-    'bones_ghost', 'bones_ghost',
     'cat_ghost', 'cat_ghost',
-    'soldier_ghost', 'flame_ghost', 'fat_ghost', 'lantern_ghost'
+    'flame_ghost', 'flame_ghost',
+    'soldier_ghost', 'soldier_ghost',
+    'lantern_ghost', 'lantern_ghost',
+    'old_ghost', 'old_ghost',
+    'sword_ghost', 'sword_ghost',
+    'loud_ghost', 'loud_ghost',
+    'bones_ghost', 'bones_ghost',
+    'fat_ghost', 'fat_ghost',
+    'bomb_ghost', 'bomb_ghost',
+    'ritual_ghost', 'ritual_ghost'
   ];
 }
 
 // Default 10 secret selected cards for quick prototype start
 export function getDefaultSelectedDeck(): string[] {
   return [
-    'fat_ghost',
+    'cat_ghost',
+    'flame_ghost',
+    'soldier_ghost',
     'lantern_ghost',
-    'loud_ghost',
-    'soldier_ghost',
-    'soldier_ghost',
     'old_ghost',
-    'flame_ghost',
-    'flame_ghost',
+    'sword_ghost',
+    'loud_ghost',
     'bones_ghost',
-    'cat_ghost'
+    'fat_ghost',
+    'bomb_ghost'
   ];
 }

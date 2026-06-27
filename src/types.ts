@@ -6,7 +6,10 @@ export type Keyword =
   | 'regen' 
   | 'cat' 
   | 'rush' 
-  | 'token';
+  | 'token'
+  | 'boom'
+  | 'strike'
+  | 'ritual';
 
 export type HoldTrigger = 
   | 'when_attacked' 
@@ -75,6 +78,7 @@ export interface PlayerState {
   selectedCardIds: string[];
   hasManifestedThisTurn: boolean;
   hasAttackedThisTurn: boolean;
+  bonusPsyNextTurn: number;
 }
 
 export type GameScreen = 'setup' | 'battle' | 'gameover';

@@ -35,7 +35,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
 
   const startBattle = (selectedDeck: string[]) => {
     sounds.playWin();
-    onComplete(selectedDeck, getDefaultSelectedDeck(), true);
+    onComplete(selectedDeck, selectedDeck, true);
   };
 
   const uniqueCards = Object.values(BASE_CARDS).filter(c => !c.token);
@@ -93,7 +93,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
             <div>
               <h1 className="text-3xl font-black tracking-tighter text-cyan-400">SPIRIT JAR</h1>
               <h2 className="text-xs uppercase tracking-widest font-bold text-slate-400">
-                Pick 10 ghosts for your secret jar. The AI uses a default deck.
+                Pick 10 ghosts. The AI mirrors your exact 10-card deck, then both decks shuffle into one Draw Jar.
               </h2>
             </div>
 
@@ -175,6 +175,8 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
           </div>
 
           <div className="mt-4 pt-4 border-t border-slate-800 text-[10px] text-slate-500 leading-relaxed font-mono">
+            <div>🤖 Mirror match: AI uses the same 10 ghosts you select.</div>
+            <div>🏺 Both 10-card decks shuffle into one Draw Jar.</div>
             <div>🤖 The Spirit Lord always plays from the top.</div>
             <div>🧠 You always play from the bottom.</div>
             <div>🔮 Psy refills each turn: turn 1 = 1/1, turn 2 = 2/2, turn 3 = 3/3.</div>

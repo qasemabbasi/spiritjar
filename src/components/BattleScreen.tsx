@@ -15,8 +15,10 @@ interface BattleScreenProps {
 
 const STARTING_JAR_HP = 12;
 const MAX_PSY = 10;
-const FIELD_LIMIT = 3;
+const FIELD_LIMIT = 4;
 const HAND_LIMIT = 5;
+const FLAME_BURN_AMOUNT = 2;
+const MAX_BURN = 4;
 
 function clonePlayers(players: PlayerState[]): PlayerState[] {
   return players.map(player => ({
@@ -100,6 +102,65 @@ function getBestAiTarget(attacker: FieldSpirit, enemy: PlayerState): FieldSpirit
     if (bLethal !== aLethal) return bLethal - aLethal;
     return BASE_CARDS[b.cardId].cost - BASE_CARDS[a.cardId].cost;
   })[0];
+}
+
+function canManifestCard(card: CardInstance, player: PlayerState): boolean {
+  const def = BASE_CARDS[card.cardId];
+  if (!def || player.currentPsy < def.cost || player.hasManifestedThisTurn) return false;
+
+  if (def.id === 'bomb_ghost') return true;
+  if (def.id === 'ritual_ghost') return player.field.filter(unit => unit.currentHp > 0).length >= 2;
+
+  return player.field.length < FIELD_LIMIT;
+}
+
+function getBestAiManifestCard(player: PlayerState, enemy: PlayerState): CardInstance | undefined {
+  const playable = player.hand.filter(card => canManifestCard(card, player));
+  if (playable.length === 0) return undefined;
+
+  return [...playable].sort((a, b) => {
+    const scoreCard = (card: CardInstance) => {
+      const def = BASE_CARDS[card.cardId];
+      if (def.id === 'bomb_ghost') {
+        const enemyNonCats = enemy.field.filter(unit => !unit.keywords.includes('cat')).length;
+        const ownNonCats = player.field.filter(unit => !unit.keywords.includes('cat')).length;
+        if (enemyNonCats >= 2 && enemyNonCats >= ownNonCats) return 100;
+        return -50;
+      }
+      if (def.id === 'ritual_ghost') return player.field.length >= 2 ? 80 : -50;
+      if (def.id === 'sword_ghost' && enemy.field.some(unit => unit.maxHp >= 5)) return 70;
+      return def.cost * 10 + def.atk + def.hp;
+    };
+
+    return scoreCard(b) - scoreCard(a);
+  })[0];
+}
+
+function sortSacrificeCandidates(field: FieldSpirit[]): FieldSpirit[] {
+  return [...field].sort((a, b) => {
+    const aToken = a.keywords.includes('token') ? 1 : 0;
+    const bToken = b.keywords.includes('token') ? 1 : 0;
+    if (bToken !== aToken) return bToken - aToken;
+    const aCost = BASE_CARDS[a.cardId]?.cost ?? 0;
+    const bCost = BASE_CARDS[b.cardId]?.cost ?? 0;
+    if (aCost !== bCost) return aCost - bCost;
+    return a.currentHp - b.currentHp;
+  });
+}
+
+function healMostDamagedFriendly(player: PlayerState, amount: number): string | null {
+  const damaged = player.field
+    .filter(unit => unit.currentHp > 0 && unit.currentHp < unit.maxHp)
+    .sort((a, b) => (b.maxHp - b.currentHp) - (a.maxHp - a.currentHp))[0];
+
+  if (!damaged) return null;
+
+  player.field = player.field.map(unit => {
+    if (unit.instanceId !== damaged.instanceId) return unit;
+    return { ...unit, currentHp: Math.min(unit.maxHp, unit.currentHp + amount) };
+  });
+
+  return BASE_CARDS[damaged.cardId].name;
 }
 
 
@@ -197,7 +258,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       field: [],
       selectedCardIds: p1Selected,
       hasManifestedThisTurn: false,
-      hasAttackedThisTurn: false
+      hasAttackedThisTurn: false,
+      bonusPsyNextTurn: 0
     },
     {
       id: 2,
@@ -210,14 +272,17 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       field: [],
       selectedCardIds: p2Selected,
       hasManifestedThisTurn: false,
-      hasAttackedThisTurn: false
+      hasAttackedThisTurn: false,
+      bonusPsyNextTurn: 0
     }
   ]);
 
   const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
   const [hoveredCard, setHoveredCard] = useState<CardDefinition | null>(null);
+  const [autoplay, setAutoplay] = useState<boolean>(false);
   const [selectedAttackerId, setSelectedAttackerId] = useState<string | null>(null);
   const [reactionContext, setReactionContext] = useState<ReactionContext | null>(null);
+  const [lastDestroyedGhosts, setLastDestroyedGhosts] = useState<Array<CardInstance | null>>([null, null]);
   const [log, setLog] = useState<GameLogEntry[]>([]);
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -257,7 +322,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         if (unit.instanceId !== targetId) return unit;
         if (unit.keywords.includes('cat') && !allowCatDamage) return unit;
         const updated = { ...unit, currentHp: unit.currentHp - damage };
-        if (sourceCardId === 'flame_ghost' && damage > 0) updated.burn = 1;
+        if (sourceCardId === 'flame_ghost' && damage > 0) updated.burn = Math.min(MAX_BURN, updated.burn + FLAME_BURN_AMOUNT);
         return updated;
       });
       return copy;
@@ -267,7 +332,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
   const resolveDefeatedUnits = useCallback(() => {
     setPlayers(prev => {
       let changed = false;
-      const newPlayers = clonePlayers(prev).map(player => {
+      const newPlayers = clonePlayers(prev).map((player, pIdx) => {
         const remainingField: FieldSpirit[] = [];
         const defeated: FieldSpirit[] = [];
 
@@ -283,6 +348,19 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         defeated.forEach(dead => {
           const def = BASE_CARDS[dead.cardId];
           addLog(`💀 ${player.name}'s ${def.name} was defeated!`, 'defeat');
+
+          if (!dead.keywords.includes('token')) {
+            setLastDestroyedGhosts(last => {
+              const copy = [...last];
+              copy[pIdx] = { instanceId: `destroyed_${dead.cardId}_${Math.random().toString(36).slice(2, 8)}`, cardId: dead.cardId, originalOwner: dead.originalOwner };
+              return copy;
+            });
+          }
+
+          if (dead.cardId === 'old_ghost') {
+            addLog(`✨ ${player.name} will gain +1 bonus Psy next turn from Old Ghost.`, 'effect');
+            player.bonusPsyNextTurn = (player.bonusPsyNextTurn || 0) + 1;
+          }
 
           if (dead.cardId === 'bones_ghost') {
             addLog('🦴 Bones Ghost leaves behind a Bone Pile token!', 'effect');
@@ -328,7 +406,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     applyDamageToSpirit(defenderPlayerIdx, defender.instanceId, damage, attacker.cardId, attacker.keywords.includes('cat'));
 
     if (attacker.cardId === 'flame_ghost') {
-      addLog(`🔥 Flame Ghost applied Burn 1 to ${defCard.name}!`, 'effect');
+      addLog(`🔥 Flame Ghost applied Burn ${FLAME_BURN_AMOUNT} to ${defCard.name}!`, 'effect');
     }
 
     if (attacker.keywords.includes('splash')) {
@@ -390,7 +468,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       { ...prev[1], hand: p2Hand }
     ]);
 
-    addLog('⚔️ Battle Started! Your deck and the AI deck were shuffled into the Draw Jar.', 'system');
+    addLog('⚔️ Battle Started! Mirror Match: your 10-card deck was copied for the AI, then both decks were shuffled into one Draw Jar.', 'system');
     addLog('Player 1 begins Turn 1.', 'turn');
   }, [p1Selected, p2Selected, addLog]);
 
@@ -467,19 +545,26 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     setPlayers(prev => {
       const copy = clonePlayers(prev);
       const active = copy[currentPlayer];
-      const nextMaxPsy = Math.min(MAX_PSY, turnCount);
+      const baseMaxPsy = Math.min(MAX_PSY, turnCount);
+      const bonusPsy = active.bonusPsyNextTurn || 0;
+      const nextMaxPsy = Math.min(MAX_PSY, baseMaxPsy + bonusPsy);
 
       active.maxPsy = nextMaxPsy;
       active.currentPsy = nextMaxPsy;
+      active.bonusPsyNextTurn = 0;
       active.hasManifestedThisTurn = false;
       active.hasAttackedThisTurn = false;
 
-      // Burn ticks at the start of the burned unit owner's turn, then clears.
+      if (bonusPsy > 0) {
+        addLog(`✨ ${active.name} gains +${bonusPsy} bonus Psy from Old Ghost.`, 'effect');
+      }
+
+      // Burn ticks at the start of the burned unit owner's turn, then decays by 1.
       active.field = active.field.map(unit => {
         if (unit.burn > 0) {
-          addLog(`🔥 ${BASE_CARDS[unit.cardId].name} takes 1 Burn damage!`, 'effect');
+          addLog(`🔥 ${BASE_CARDS[unit.cardId].name} takes ${unit.burn} Burn damage!`, 'effect');
           sounds.playBurn();
-          return { ...unit, currentHp: unit.currentHp - 1, burn: 0 };
+          return { ...unit, currentHp: unit.currentHp - unit.burn, burn: Math.max(0, unit.burn - 1) };
         }
         return unit;
       });
@@ -543,14 +628,20 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         });
       }
 
-      const hasOldGhost = updatedField.some(unit => unit.cardId === 'old_ghost' && unit.currentHp > 0);
-      if (hasOldGhost && updatedField.filter(unit => unit.currentHp > 0).length > 1) {
-        addLog('👴 Old Ghost restores 1 Jar HP at end of turn.', 'effect');
+      active.field = updatedField;
+
+      const hasOldGhost = active.field.some(unit => unit.cardId === 'old_ghost' && unit.currentHp > 0);
+      if (hasOldGhost && active.field.filter(unit => unit.currentHp > 0).length > 1) {
+        const healedName = healMostDamagedFriendly(active, 1);
+        if (healedName) {
+          addLog(`👴 Old Ghost restores 1 HP to ${healedName}.`, 'effect');
+        } else {
+          addLog('👴 Old Ghost restores 1 Jar HP.', 'effect');
+          active.jarHp = Math.min(STARTING_JAR_HP, active.jarHp + 1);
+        }
         sounds.playHeal();
-        active.jarHp = Math.min(STARTING_JAR_HP, active.jarHp + 1);
       }
 
-      active.field = updatedField;
       return copy;
     });
   }, [addLog, turnCount]);
@@ -585,12 +676,16 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       addLog('⚠️ You already Manifested this turn.', 'system');
       return;
     }
-    if (active.field.length >= FIELD_LIMIT) {
-      addLog(`⚠️ Field is full (${FIELD_LIMIT}/${FIELD_LIMIT}). Cannot Manifest another spirit.`, 'system');
-      return;
-    }
     if (active.currentPsy < def.cost) {
       addLog(`⚠️ Not enough Psy (${active.currentPsy}/${def.cost}).`, 'system');
+      return;
+    }
+    if (def.id === 'ritual_ghost' && active.field.filter(unit => unit.currentHp > 0).length < 2) {
+      addLog('⚠️ Ritual Ghost requires 2 friendly spirits to sacrifice.', 'system');
+      return;
+    }
+    if (active.field.length >= FIELD_LIMIT && def.id !== 'bomb_ghost' && def.id !== 'ritual_ghost') {
+      addLog(`⚠️ Field is full (${FIELD_LIMIT}/${FIELD_LIMIT}). Cannot Manifest another spirit.`, 'system');
       return;
     }
 
@@ -603,6 +698,28 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       player.hand = player.hand.filter(card => card.instanceId !== instance.instanceId);
       player.currentPsy -= def.cost;
       player.hasManifestedThisTurn = true;
+
+      if (def.id === 'bomb_ghost') {
+        addLog('💣 Bomb Ghost explodes! All non-Cat spirits are cleared from both fields.', 'effect');
+        sounds.playBurn();
+        copy.forEach(boardPlayer => {
+          boardPlayer.field = boardPlayer.field.filter(unit => unit.keywords.includes('cat'));
+        });
+        setDiscardPile(dp => [...dp, instance]);
+        return copy;
+      }
+
+      if (def.id === 'ritual_ghost') {
+        const sacrifices = sortSacrificeCandidates(player.field).slice(0, 2);
+        const sacrificeIds = new Set(sacrifices.map(unit => unit.instanceId));
+        addLog(`🕯️ Ritual Ghost sacrifices ${sacrifices.map(unit => BASE_CARDS[unit.cardId].name).join(' and ')}.`, 'effect');
+        player.field = player.field.filter(unit => !sacrificeIds.has(unit.instanceId));
+        sacrifices.forEach(unit => {
+          if (!unit.keywords.includes('token')) {
+            setDiscardPile(dp => [...dp, { instanceId: unit.instanceId, cardId: unit.cardId, originalOwner: unit.originalOwner }]);
+          }
+        });
+      }
 
       const newUnit = makeSpirit(instance, turnCount, currentPlayer);
       player.field = [...player.field, newUnit];
@@ -634,9 +751,14 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       }
 
       if (def.id === 'old_ghost') {
-        addLog('👴 Old Ghost restores 2 Jar HP!', 'effect');
+        const healedName = healMostDamagedFriendly(player, 2);
+        if (healedName) {
+          addLog(`👴 Old Ghost restores 2 HP to ${healedName}!`, 'effect');
+        } else {
+          addLog('👴 Old Ghost restores 2 Jar HP!', 'effect');
+          player.jarHp = Math.min(STARTING_JAR_HP, player.jarHp + 2);
+        }
         sounds.playHeal();
-        player.jarHp = Math.min(STARTING_JAR_HP, player.jarHp + 2);
       }
 
       return copy;
@@ -702,6 +824,66 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     if (!hasReaction) performUnitAttack(attacker, targetUnit, currentPlayer);
   }, [addLog, currentPlayer, performJarAttack, performUnitAttack, phase, players, reactionContext, selectedAttackerId, triggerHoldReactionWindow, winner]);
 
+  const playReactHoldCard = useCallback((cardInst: CardInstance, playerIdx: 0 | 1) => {
+    const def = BASE_CARDS[cardInst.cardId];
+    const player = players[playerIdx];
+
+    if (!def.hasHold || def.holdTrigger !== 'react_phase') return;
+
+    sounds.playManifest();
+    addLog(`⚡ REACT PLAYED: ${player.name} uses ${def.name} Hold effect!`, 'hold');
+
+    setPlayers(prev => {
+      const copy = clonePlayers(prev);
+      const active = copy[playerIdx];
+      active.hand = active.hand.filter(card => card.instanceId !== cardInst.instanceId);
+
+      if (def.id === 'sword_ghost') {
+        const target = [...active.field]
+          .filter(unit => unit.currentHp > 0 && !unit.keywords.includes('token'))
+          .sort((a, b) => b.atk - a.atk || b.currentHp - a.currentHp)[0]
+          ?? [...active.field].filter(unit => unit.currentHp > 0).sort((a, b) => b.atk - a.atk)[0];
+
+        if (target) {
+          active.field = active.field.map(unit => {
+            if (unit.instanceId !== target.instanceId) return unit;
+            return { ...unit, atk: unit.atk + 2 };
+          });
+          addLog(`🗡️ Sword Ghost gives ${BASE_CARDS[target.cardId].name} +2 ATK.`, 'effect');
+        } else {
+          addLog('⚠️ Sword Ghost had no friendly spirit to empower.', 'system');
+        }
+      }
+
+      if (def.id === 'ritual_ghost') {
+        const lastDestroyed = lastDestroyedGhosts[playerIdx];
+        if (!lastDestroyed) {
+          addLog('⚠️ Ritual Ghost has no destroyed ghost to resummon.', 'system');
+        } else if (active.field.length >= FIELD_LIMIT) {
+          addLog(`⚠️ Field is full (${FIELD_LIMIT}/${FIELD_LIMIT}). Ritual Ghost cannot resummon.`, 'system');
+        } else {
+          const revivedInstance = makeInstance(lastDestroyed.cardId, playerIdx, `ritual_revive_${playerIdx}`);
+          const revived = makeSpirit(revivedInstance, turnCount, playerIdx);
+          revived.canAttackThisTurn = false;
+          active.field.push(revived);
+          addLog(`🕯️ Ritual Ghost resummons ${BASE_CARDS[lastDestroyed.cardId].name}!`, 'effect');
+          setLastDestroyedGhosts(last => {
+            const next = [...last];
+            next[playerIdx] = null;
+            return next;
+          });
+        }
+      }
+
+      return copy;
+    });
+
+    setDiscardPile(dp => [...dp, cardInst]);
+    setSelectedHandCardId(null);
+    setSelectedAttackerId(null);
+    resolveDefeatedUnits();
+  }, [addLog, lastDestroyedGhosts, players, resolveDefeatedUnits, turnCount]);
+
   const passReaction = useCallback(() => {
     if (!reactionContext) return;
     addLog(`${players[reactionContext.targetPlayerIndex].name} passed on the Reaction window.`, 'turn');
@@ -742,7 +924,26 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     const sourcePlayerIdx = reactionContext.sourcePlayerIndex as 0 | 1;
     const attacker = players[sourcePlayerIdx].field.find(unit => unit.instanceId === reactionContext.sourceSpiritInstanceId);
 
-    if (def.id === 'soldier_ghost') {
+    if (def.id === 'bomb_ghost') {
+      if (attacker && !attacker.keywords.includes('cat')) {
+        addLog(`💣 Bomb Ghost destroys the attacking ${BASE_CARDS[attacker.cardId].name}!`, 'effect');
+        setPlayers(prev => {
+          const copy = clonePlayers(prev);
+          copy[sourcePlayerIdx].field = copy[sourcePlayerIdx].field.map(unit => {
+            if (unit.instanceId !== attacker.instanceId) return unit;
+            return { ...unit, currentHp: 0 };
+          });
+          return copy;
+        });
+        exhaustAttacker(sourcePlayerIdx, attacker.instanceId);
+      } else {
+        addLog('🐾 Bomb Ghost cannot destroy a Cat Ghost attacker.', 'effect');
+        if (attacker && reactionContext.targetSpiritInstanceId) {
+          const target = players[reactingPlayerIdx].field.find(unit => unit.instanceId === reactionContext.targetSpiritInstanceId);
+          if (target) performUnitAttack(attacker, target, sourcePlayerIdx);
+        }
+      }
+    } else if (def.id === 'soldier_ghost') {
       addLog('🛡️ Soldier Ghost manifests to intercept the incoming attack!', 'effect');
       setPlayers(prev => {
         const copy = clonePlayers(prev);
@@ -774,12 +975,12 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       if (attacker) performJarAttack(attacker, sourcePlayerIdx);
     } else if (def.id === 'flame_ghost') {
       if (attacker) {
-        addLog('🔥 Flame Ghost sets the attacker ablaze with Burn 1!', 'effect');
+        addLog(`🔥 Flame Ghost sets the attacker ablaze with Burn ${FLAME_BURN_AMOUNT}!`, 'effect');
         setPlayers(prev => {
           const copy = clonePlayers(prev);
           copy[sourcePlayerIdx].field = copy[sourcePlayerIdx].field.map(unit => {
             if (unit.instanceId !== attacker.instanceId) return unit;
-            return { ...unit, burn: 1 };
+            return { ...unit, burn: Math.min(MAX_BURN, unit.burn + FLAME_BURN_AMOUNT) };
           });
           return copy;
         });
@@ -837,22 +1038,17 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
   useEffect(() => {
     if (winner || reactionContext) return;
     const active = players[currentPlayer];
-    if (!active.isBot) return;
+    if (!active.isBot && !autoplay) return;
 
     const timer = setTimeout(() => {
       const enemyIdx = currentPlayer === 0 ? 1 : 0;
       const enemy = players[enemyIdx];
 
       if (phase === 'main') {
-        if (!active.hasManifestedThisTurn && active.field.length < FIELD_LIMIT) {
-          const playable = active.hand
-            .filter(card => BASE_CARDS[card.cardId].cost <= active.currentPsy)
-            .sort((a, b) => BASE_CARDS[b.cardId].cost - BASE_CARDS[a.cardId].cost);
-
-          if (playable.length > 0) {
-            manifestCard(playable[0]);
-            return;
-          }
+        const playable = getBestAiManifestCard(active, enemy);
+        if (playable) {
+          manifestCard(playable);
+          return;
         }
 
         setPhase('attack');
@@ -897,7 +1093,25 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         return;
       }
 
-      if (phase === 'react' || phase === 'end') {
+      if (phase === 'react') {
+        const reactHold = active.hand.find(card => {
+          const def = BASE_CARDS[card.cardId];
+          if (!def?.hasHold || def.holdTrigger !== 'react_phase') return false;
+          if (def.id === 'sword_ghost') return active.field.some(unit => unit.currentHp > 0);
+          if (def.id === 'ritual_ghost') return !!lastDestroyedGhosts[currentPlayer] && active.field.length < FIELD_LIMIT;
+          return true;
+        });
+
+        if (reactHold) {
+          playReactHoldCard(reactHold, currentPlayer);
+          return;
+        }
+
+        handleEndTurn();
+        return;
+      }
+
+      if (phase === 'end') {
         handleEndTurn();
         return;
       }
@@ -907,12 +1121,12 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     }, 550);
 
     return () => clearTimeout(timer);
-  }, [currentPlayer, handleEndTurn, manifestCard, performJarAttack, performUnitAttack, phase, players, reactionContext, triggerHoldReactionWindow, winner]);
+  }, [autoplay, currentPlayer, handleEndTurn, lastDestroyedGhosts, manifestCard, performJarAttack, performUnitAttack, phase, players, playReactHoldCard, reactionContext, triggerHoldReactionWindow, winner]);
 
   useEffect(() => {
     if (!reactionContext) return;
     const reactingPlayer = players[reactionContext.targetPlayerIndex];
-    if (!reactingPlayer.isBot) return;
+    if (!reactingPlayer.isBot && !autoplay) return;
 
     const timer = setTimeout(() => {
       const usableHolds = reactingPlayer.hand.filter(card => {
@@ -925,12 +1139,12 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     }, 700);
 
     return () => clearTimeout(timer);
-  }, [passReaction, playHoldCard, players, reactionContext]);
+  }, [autoplay, passReaction, playHoldCard, players, reactionContext]);
 
   const humanPlayer = players[0];
   const computerPlayer = players[1];
   const isHumanTurn = currentPlayer === 0;
-  const humanCanAct = isHumanTurn && !winner;
+  const humanCanAct = isHumanTurn && !winner && !autoplay;
   const selectedAttacker = humanPlayer.field.find(unit => unit.instanceId === selectedAttackerId);
   const canAttackEnemyJar = !!selectedAttacker && computerPlayer.field.length === 0 && !selectedAttacker.keywords.includes('cat');
   const humanValidAttackers = getValidAttackers(humanPlayer, computerPlayer);
@@ -940,6 +1154,15 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     if (reactionContext.targetPlayerIndex !== 0) return false;
     const def = BASE_CARDS[card.cardId];
     return def && def.hasHold && def.holdTrigger === reactionContext.trigger;
+  };
+
+  const isCardUsableReactPhase = (card: CardInstance) => {
+    const def = BASE_CARDS[card.cardId];
+    if (!def || !def.hasHold || def.holdTrigger !== 'react_phase') return false;
+    if (!humanCanAct || phase !== 'react' || reactionContext) return false;
+    if (def.id === 'sword_ghost') return humanPlayer.field.some(unit => unit.currentHp > 0);
+    if (def.id === 'ritual_ghost') return !!lastDestroyedGhosts[0] && humanPlayer.field.length < FIELD_LIMIT;
+    return true;
   };
 
   const unitCardClass = '!w-28 !h-40 lg:!w-32 lg:!h-44';
@@ -1011,7 +1234,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
               onClick={() => handleTargetClick(undefined, true)}
             />
             <div className="flex justify-center gap-2 items-center">
-              {[0, 1, 2].map(slotIdx => {
+              {[0, 1, 2, 3].map(slotIdx => {
                 const unit = computerPlayer.field[slotIdx];
                 const canBeTargeted = !!(
                   humanCanAct &&
@@ -1045,6 +1268,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
                 </div>
               </div>
               <div className="text-[10px] uppercase mt-1 font-bold text-cyan-400 tracking-widest">Draw Jar</div>
+              <div className="mt-0.5 text-[8px] font-mono uppercase tracking-widest text-slate-500">Mirror Pool</div>
             </div>
 
             <div className="text-center group">
@@ -1059,7 +1283,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           <div className="flex justify-center items-center gap-2 shrink-0">
             <JarTarget label="Your Jar" hp={humanPlayer.jarHp} maxHp={STARTING_JAR_HP} owner="player" />
             <div className="flex justify-center gap-2 items-center">
-              {[0, 1, 2].map(slotIdx => {
+              {[0, 1, 2, 3].map(slotIdx => {
                 const unit = humanPlayer.field[slotIdx];
                 const isEligibleAttacker = !!(humanCanAct && phase === 'attack' && unit && getValidAttackers(humanPlayer, computerPlayer).some(attacker => attacker.instanceId === unit.instanceId));
 
@@ -1125,6 +1349,24 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           <div className="space-y-2 shrink-0 pt-2 border-t border-slate-800">
             <div className="text-center py-1.5 text-[10px] bg-cyan-900/40 border border-cyan-800/60 text-cyan-300 font-bold uppercase rounded tracking-widest">
               Phase: <span className="text-white">{reactionContext ? '⚠️ REACTION' : phase.toUpperCase()}</span>
+            </div>
+
+            <button
+              onClick={() => {
+                setAutoplay(prev => !prev);
+                setSelectedAttackerId(null);
+              }}
+              className={`w-full py-2 rounded-lg border text-[10px] font-black uppercase tracking-widest transition-all ${
+                autoplay
+                  ? 'bg-emerald-500 text-slate-950 border-emerald-300 shadow-[0_0_18px_rgba(16,185,129,0.45)]'
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-700'
+              }`}
+            >
+              Autoplay: {autoplay ? 'On' : 'Off'}
+            </button>
+
+            <div className="rounded-lg border border-indigo-800/70 bg-indigo-950/30 px-2 py-1.5 text-[9px] font-mono leading-snug text-slate-400">
+              <span className="font-black text-cyan-300">Draw Jar:</span> your 10-card deck + the AI mirror copy. Same card pool, shuffled together.
             </div>
 
             {selectedAttacker && !reactionContext && (
@@ -1234,18 +1476,18 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
 
               const isReactionWindow = !!reactionContext && reactionContext.targetPlayerIndex === 0;
               const usableInReaction = isCardUsableReaction(cardInst);
+              const usableInReactPhase = isCardUsableReactPhase(cardInst);
               const canPlayManifest = !!(
                 humanCanAct &&
                 phase === 'main' &&
                 !reactionContext &&
-                humanPlayer.currentPsy >= def.cost &&
-                humanPlayer.field.length < FIELD_LIMIT &&
-                !humanPlayer.hasManifestedThisTurn
+                canManifestCard(cardInst, humanPlayer)
               );
 
               let disabledReason: string | undefined;
               if (phase !== 'main' && !isReactionWindow) disabledReason = 'Can only Manifest during Main phase';
-              else if (humanPlayer.field.length >= FIELD_LIMIT) disabledReason = `Field full (${FIELD_LIMIT}/${FIELD_LIMIT} slots)`;
+              else if (def.id === 'ritual_ghost' && humanPlayer.field.filter(unit => unit.currentHp > 0).length < 2) disabledReason = 'Needs 2 friendly sacrifices';
+              else if (humanPlayer.field.length >= FIELD_LIMIT && def.id !== 'bomb_ghost' && def.id !== 'ritual_ghost') disabledReason = `Field full (${FIELD_LIMIT}/${FIELD_LIMIT} slots)`;
               else if (humanPlayer.currentPsy < def.cost) disabledReason = `Need ${def.cost} Psy (${humanPlayer.currentPsy}/${def.cost})`;
               else if (humanPlayer.hasManifestedThisTurn) disabledReason = 'Already Manifested 1 spirit this turn';
 
@@ -1261,14 +1503,18 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
                   <CardView
                     card={def}
                     canManifest={canPlayManifest}
-                    isHoldReady={usableInReaction}
+                    isHoldReady={usableInReaction || usableInReactPhase}
                     onClick={() => {
                       if (usableInReaction) playHoldCard(cardInst);
+                      else if (usableInReactPhase) playReactHoldCard(cardInst, 0);
                       else if (canPlayManifest) manifestCard(cardInst);
                       setSelectedHandCardId(cardInst.instanceId);
                     }}
-                    onHoldClick={() => usableInReaction && playHoldCard(cardInst)}
-                    disabledReason={!canPlayManifest && !usableInReaction ? disabledReason : undefined}
+                    onHoldClick={() => {
+                      if (usableInReaction) playHoldCard(cardInst);
+                      else if (usableInReactPhase) playReactHoldCard(cardInst, 0);
+                    }}
+                    disabledReason={!canPlayManifest && !usableInReaction && !usableInReactPhase ? disabledReason : undefined}
                     className="!w-28 !h-32 lg:!w-32 lg:!h-[8.5rem] text-[9px]"
                     compact
                   />
