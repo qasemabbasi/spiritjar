@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { CardInstance, FieldSpirit, PlayerState, TurnPhase, GameLogEntry, ReactionContext, HoldTrigger } from '../types';
+import { CardInstance, FieldSpirit, PlayerState, TurnPhase, GameLogEntry, ReactionContext } from '../types';
 import { BASE_CARDS } from '../data/cards';
 import { CardView } from './CardView';
 import { FieldUnitView } from './FieldUnitView';
@@ -13,11 +13,136 @@ interface BattleScreenProps {
   onRestart: () => void;
 }
 
+const STARTING_JAR_HP = 12;
+const MAX_PSY = 10;
+const FIELD_LIMIT = 3;
+const HAND_LIMIT = 5;
+
+function clonePlayers(players: PlayerState[]): PlayerState[] {
+  return players.map(player => ({
+    ...player,
+    hand: [...player.hand],
+    field: player.field.map(unit => ({ ...unit, keywords: [...unit.keywords] }))
+  }));
+}
+
+function makeInstance(cardId: string, originalOwner: 0 | 1, prefix: string): CardInstance {
+  return {
+    instanceId: `${prefix}_${cardId}_${Math.random().toString(36).slice(2, 8)}`,
+    cardId,
+    originalOwner
+  };
+}
+
+function makeSpirit(instance: CardInstance, turnCount: number, currentPlayer: 0 | 1): FieldSpirit {
+  const def = BASE_CARDS[instance.cardId];
+
+  return {
+    instanceId: instance.instanceId,
+    cardId: def.id,
+    currentHp: def.hp,
+    maxHp: def.hp,
+    atk: def.atk,
+    def: def.def,
+    keywords: [...def.keywords],
+    canAttackThisTurn: def.keywords.includes('rush'),
+    summonedTurn: turnCount,
+    burn: 0,
+    originalOwner: instance.originalOwner ?? currentPlayer
+  };
+}
+
+function shuffleDeck(deck: CardInstance[]): CardInstance[] {
+  const copy = [...deck];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+function hasValidUnitTarget(attacker: FieldSpirit, enemy: PlayerState, target?: FieldSpirit): boolean {
+  if (!target) return false;
+
+  const enemyTaunts = enemy.field.filter(unit => unit.keywords.includes('taunt'));
+  if (enemyTaunts.length > 0 && !target.keywords.includes('taunt')) return false;
+
+  // Cat Ghost can only be attacked/damaged by Cat Ghosts.
+  if (target.keywords.includes('cat') && !attacker.keywords.includes('cat')) return false;
+
+  return true;
+}
+
+function hasValidAttackTarget(attacker: FieldSpirit, enemy: PlayerState): boolean {
+  const validUnitTarget = enemy.field.some(target => hasValidUnitTarget(attacker, enemy, target));
+  if (validUnitTarget) return true;
+
+  if (enemy.field.length > 0) return false;
+  if (attacker.keywords.includes('cat')) return false;
+
+  return true;
+}
+
+function getValidAttackers(player: PlayerState, enemy: PlayerState): FieldSpirit[] {
+  return player.field.filter(unit => unit.canAttackThisTurn && hasValidAttackTarget(unit, enemy));
+}
+
+function getBestAiTarget(attacker: FieldSpirit, enemy: PlayerState): FieldSpirit | undefined {
+  const validTargets = enemy.field.filter(target => hasValidUnitTarget(attacker, enemy, target));
+  if (validTargets.length === 0) return undefined;
+
+  const taunts = validTargets.filter(target => target.keywords.includes('taunt'));
+  const pool = taunts.length > 0 ? taunts : validTargets;
+
+  return [...pool].sort((a, b) => {
+    const aLethal = Math.max(1, attacker.atk - a.def) >= a.currentHp ? 1 : 0;
+    const bLethal = Math.max(1, attacker.atk - b.def) >= b.currentHp ? 1 : 0;
+    if (bLethal !== aLethal) return bLethal - aLethal;
+    return BASE_CARDS[b.cardId].cost - BASE_CARDS[a.cardId].cost;
+  })[0];
+}
+
+function JarTarget({
+  label,
+  hp,
+  maxHp,
+  owner,
+  isClickable = false,
+  onClick
+}: {
+  label: string;
+  hp: number;
+  maxHp: number;
+  owner: 'player' | 'enemy';
+  isClickable?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={isClickable ? onClick : undefined}
+      disabled={!isClickable}
+      className={`w-28 h-28 rounded-2xl border-2 flex flex-col items-center justify-center shrink-0 transition-all ${
+        isClickable
+          ? 'bg-rose-600/30 border-rose-300 ring-4 ring-rose-400/70 shadow-[0_0_28px_rgba(244,63,94,0.65)] cursor-pointer hover:scale-105 animate-pulse'
+          : owner === 'enemy'
+          ? 'bg-indigo-950/70 border-indigo-500/50'
+          : 'bg-cyan-950/60 border-cyan-500/50'
+      }`}
+    >
+      <div className="text-4xl leading-none">🏺</div>
+      <div className="text-[9px] uppercase tracking-widest font-black text-slate-300 mt-1">{label}</div>
+      <div className="text-2xl font-black font-mono text-rose-400">
+        {hp < 10 ? `0${hp}` : hp}<span className="text-xs opacity-50">/{maxHp}</span>
+      </div>
+    </button>
+  );
+}
+
 export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreenProps) {
-  // Game State
   const [sharedDeck, setSharedDeck] = useState<CardInstance[]>([]);
   const [discardPile, setDiscardPile] = useState<CardInstance[]>([]);
-  const [currentPlayer, setCurrentPlayer] = useState<0 | 1>(0); // 0 = P1, 1 = P2
+  const [currentPlayer, setCurrentPlayer] = useState<0 | 1>(0);
   const [phase, setPhase] = useState<TurnPhase>('start');
   const [turnCount, setTurnCount] = useState<number>(1);
   const [winner, setWinner] = useState<PlayerState | null>(null);
@@ -27,7 +152,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       id: 1,
       name: 'Player 1',
       isBot: false,
-      jarHp: 12,
+      jarHp: STARTING_JAR_HP,
       maxPsy: 0,
       currentPsy: 0,
       hand: [],
@@ -40,7 +165,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       id: 2,
       name: 'Spirit Lord (AI)',
       isBot: true,
-      jarHp: 12,
+      jarHp: STARTING_JAR_HP,
       maxPsy: 0,
       currentPsy: 0,
       hand: [],
@@ -61,7 +186,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     setLog(prev => [
       ...prev,
       {
-        id: Math.random().toString(36).substring(2, 9),
+        id: Math.random().toString(36).slice(2, 9),
         text,
         type,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
@@ -69,58 +194,171 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     ]);
   }, []);
 
-  // Initialize Game on Mount
-  useEffect(() => {
-    // Combine selected cards into shared deck
-    const deck: CardInstance[] = [];
-    p1Selected.forEach((cardId, idx) => {
-      deck.push({ instanceId: `p1_${cardId}_${idx}_${Math.random().toString(36).substr(2, 5)}`, cardId, originalOwner: 0 });
+  const exhaustAttacker = useCallback((playerIdx: 0 | 1, attackerId: string) => {
+    setPlayers(prev => {
+      const copy = clonePlayers(prev);
+      copy[playerIdx].field = copy[playerIdx].field.map(unit => {
+        if (unit.instanceId !== attackerId) return unit;
+        return { ...unit, canAttackThisTurn: false };
+      });
+      return copy;
     });
-    p2Selected.forEach((cardId, idx) => {
-      deck.push({ instanceId: `p2_${cardId}_${idx}_${Math.random().toString(36).substr(2, 5)}`, cardId, originalOwner: 1 });
-    });
+  }, []);
 
-    // Shuffle deck
-    for (let i = deck.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [deck[i], deck[j]] = [deck[j], deck[i]];
+  const applyDamageToSpirit = useCallback((
+    targetPlayerIdx: 0 | 1,
+    targetId: string,
+    damage: number,
+    sourceCardId?: string,
+    allowCatDamage = false
+  ) => {
+    setPlayers(prev => {
+      const copy = clonePlayers(prev);
+      copy[targetPlayerIdx].field = copy[targetPlayerIdx].field.map(unit => {
+        if (unit.instanceId !== targetId) return unit;
+        if (unit.keywords.includes('cat') && !allowCatDamage) return unit;
+        const updated = { ...unit, currentHp: unit.currentHp - damage };
+        if (sourceCardId === 'flame_ghost' && damage > 0) updated.burn = 1;
+        return updated;
+      });
+      return copy;
+    });
+  }, []);
+
+  const resolveDefeatedUnits = useCallback(() => {
+    setPlayers(prev => {
+      let changed = false;
+      const newPlayers = clonePlayers(prev).map(player => {
+        const remainingField: FieldSpirit[] = [];
+        const defeated: FieldSpirit[] = [];
+
+        player.field.forEach(unit => {
+          if (unit.currentHp <= 0) {
+            defeated.push(unit);
+            changed = true;
+          } else {
+            remainingField.push(unit);
+          }
+        });
+
+        defeated.forEach(dead => {
+          const def = BASE_CARDS[dead.cardId];
+          addLog(`💀 ${player.name}'s ${def.name} was defeated!`, 'defeat');
+
+          if (dead.cardId === 'bones_ghost') {
+            addLog('🦴 Bones Ghost leaves behind a Bone Pile token!', 'effect');
+            remainingField.push({
+              instanceId: `token_bone_${Math.random().toString(36).slice(2, 8)}`,
+              cardId: 'bone_pile_token',
+              currentHp: 1,
+              maxHp: 1,
+              atk: 0,
+              def: 0,
+              keywords: ['token', 'regen'],
+              canAttackThisTurn: false,
+              summonedTurn: turnCount,
+              burn: 0,
+              originalOwner: dead.originalOwner
+            });
+          } else if (!dead.keywords.includes('token')) {
+            setDiscardPile(dp => [...dp, { instanceId: dead.instanceId, cardId: dead.cardId, originalOwner: dead.originalOwner }]);
+          }
+        });
+
+        return { ...player, field: remainingField };
+      });
+
+      return changed ? newPlayers : prev;
+    });
+  }, [addLog, turnCount]);
+
+  const executeAttackDamage = useCallback((attacker: FieldSpirit, defender: FieldSpirit, attackerPlayerIdx: 0 | 1) => {
+    const defenderPlayerIdx = attackerPlayerIdx === 0 ? 1 : 0;
+    const defCard = BASE_CARDS[defender.cardId];
+    const atkCard = BASE_CARDS[attacker.cardId];
+
+    if (defender.keywords.includes('cat') && !attacker.keywords.includes('cat')) {
+      addLog('🛡️ Cat Ghost can only be attacked by another Cat Ghost! 0 damage dealt.', 'effect');
+      return;
     }
 
-    // Deal 4 cards to P1 and 4 cards to the AI
-    const p1Hand = deck.splice(0, 4);
-    const p2Hand = deck.splice(0, 4);
+    const damage = Math.max(1, attacker.atk - defender.def);
+    sounds.playAttack();
+    addLog(`⚔️ ${atkCard.name} attacks ${defCard.name} for ${damage} damage.`, 'attack');
 
-    setSharedDeck(deck);
+    applyDamageToSpirit(defenderPlayerIdx, defender.instanceId, damage, attacker.cardId, attacker.keywords.includes('cat'));
+
+    if (attacker.cardId === 'flame_ghost') {
+      addLog(`🔥 Flame Ghost applied Burn 1 to ${defCard.name}!`, 'effect');
+    }
+
+    if (attacker.keywords.includes('splash')) {
+      addLog('💥 Splash 1! Other enemy spirits take 1 damage.', 'effect');
+      players[defenderPlayerIdx].field.forEach(unit => {
+        if (unit.instanceId === defender.instanceId) return;
+        applyDamageToSpirit(defenderPlayerIdx, unit.instanceId, 1, undefined, attacker.keywords.includes('cat'));
+      });
+    }
+  }, [addLog, applyDamageToSpirit, players]);
+
+  const performUnitAttack = useCallback((attacker: FieldSpirit, target: FieldSpirit, attackerPlayerIdx: 0 | 1) => {
+    executeAttackDamage(attacker, target, attackerPlayerIdx);
+    exhaustAttacker(attackerPlayerIdx, attacker.instanceId);
+    setSelectedAttackerId(null);
+    resolveDefeatedUnits();
+  }, [executeAttackDamage, exhaustAttacker, resolveDefeatedUnits]);
+
+  const performJarAttack = useCallback((attacker: FieldSpirit, attackerPlayerIdx: 0 | 1) => {
+    const targetPlayerIdx = attackerPlayerIdx === 0 ? 1 : 0;
+    sounds.playAttack();
+    addLog(`💥 ${BASE_CARDS[attacker.cardId].name} attacks ${players[targetPlayerIdx].name}'s Jar for ${attacker.atk} damage!`, 'attack');
+    setPlayers(prev => {
+      const copy = clonePlayers(prev);
+      copy[targetPlayerIdx].jarHp -= attacker.atk;
+      return copy;
+    });
+    exhaustAttacker(attackerPlayerIdx, attacker.instanceId);
+    setSelectedAttackerId(null);
+  }, [addLog, exhaustAttacker, players]);
+
+  const triggerHoldReactionWindow = useCallback((ctx: ReactionContext) => {
+    const targetPlayer = players[ctx.targetPlayerIndex];
+    const usableHolds = targetPlayer.hand.filter(card => {
+      const def = BASE_CARDS[card.cardId];
+      return def && def.hasHold && def.holdTrigger === ctx.trigger;
+    });
+
+    if (usableHolds.length === 0) return false;
+
+    sounds.playHoldReady();
+    setReactionContext(ctx);
+    addLog(`⚠️ REACTION WINDOW: ${targetPlayer.name} may play a Hold effect!`, 'hold');
+    return true;
+  }, [addLog, players]);
+
+  useEffect(() => {
+    const deck: CardInstance[] = [];
+    p1Selected.forEach((cardId, idx) => deck.push(makeInstance(cardId, 0, `p1_${idx}`)));
+    p2Selected.forEach((cardId, idx) => deck.push(makeInstance(cardId, 1, `ai_${idx}`)));
+
+    const shuffled = shuffleDeck(deck);
+    const p1Hand = shuffled.splice(0, 4);
+    const p2Hand = shuffled.splice(0, 4);
+
+    setSharedDeck(shuffled);
     setPlayers(prev => [
       { ...prev[0], hand: p1Hand },
       { ...prev[1], hand: p2Hand }
     ]);
 
-    addLog('⚔️ Battle Started! Your secret deck and the AI deck were shuffled into the shared Spirit Jar.', 'system');
+    addLog('⚔️ Battle Started! Your deck and the AI deck were shuffled into the Draw Jar.', 'system');
     addLog('Player 1 begins Turn 1.', 'turn');
   }, [p1Selected, p2Selected, addLog]);
 
-  // Auto scroll log
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [log]);
 
-  // Reshuffle discard rule helper
-  const checkReshuffle = useCallback((currentDeck: CardInstance[], currentDiscard: CardInstance[]) => {
-    if (currentDeck.length <= 4 && currentDiscard.length > 0) {
-      addLog(`♻️ Shared deck low (${currentDeck.length} cards). Shuffling ${currentDiscard.length} discarded cards back into Jar!`, 'system');
-      sounds.playCardDraw();
-      const newDeck = [...currentDeck, ...currentDiscard];
-      for (let i = newDeck.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [newDeck[i], newDeck[j]] = [newDeck[j], newDeck[i]];
-      }
-      return { newDeck, newDiscard: [] };
-    }
-    return { newDeck: currentDeck, newDiscard: currentDiscard };
-  }, [addLog]);
-
-  // Check Win Condition
   useEffect(() => {
     if (winner) return;
     if (players[0].jarHp <= 0) {
@@ -131,144 +369,33 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       sounds.playWin();
       confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
       setWinner(players[0]);
-      addLog(`🏆 ${players[0].name} wins! Opponent's Spirit Jar shattered!`, 'win');
+      addLog(`🏆 ${players[0].name} wins! The enemy Spirit Jar shattered!`, 'win');
     }
   }, [players, winner, addLog]);
 
-  // Phase Execution Helpers
-  const triggerHoldReactionWindow = (ctx: ReactionContext) => {
-    // Check if target player actually has a usable hold card for this trigger
-    const targetPlayer = players[ctx.targetPlayerIndex];
-    const usableHolds = targetPlayer.hand.filter(c => {
-      const def = BASE_CARDS[c.cardId];
-      return def && def.hasHold && def.holdTrigger === ctx.trigger;
-    });
-
-    if (usableHolds.length > 0) {
-      sounds.playHoldReady();
-      setReactionContext(ctx);
-      addLog(`⚠️ REACTION WINDOW: ${targetPlayer.name} may play a Hold effect!`, 'hold');
-      return true;
-    }
-    return false;
-  };
-
-  const executeAttackDamage = useCallback((attacker: FieldSpirit, defender: FieldSpirit, attackerPlayerIdx: 0 | 1) => {
-    const defenderPlayerIdx = attackerPlayerIdx === 0 ? 1 : 0;
-    const defCard = BASE_CARDS[defender.cardId];
-    const atkCard = BASE_CARDS[attacker.cardId];
-
-    // Check Cat restriction
-    if (defender.keywords.includes('cat') && !attacker.keywords.includes('cat')) {
-      addLog(`🛡️ Cat Ghost is immune to non-Cat attacks! 0 damage dealt.`, 'effect');
-      return;
-    }
-
-    let damage = Math.max(1, attacker.atk - defender.def);
-    sounds.playAttack();
-    addLog(`⚔️ ${atkCard.name} attacks ${defCard.name} for ${damage} damage (ATK ${attacker.atk} - DEF ${defender.def}).`, 'attack');
-
-    setPlayers(prev => {
-      const copy = [...prev];
-      const targetField = [...copy[defenderPlayerIdx].field];
-      const targetUnitIdx = targetField.findIndex(u => u.instanceId === defender.instanceId);
-      if (targetUnitIdx === -1) return prev;
-
-      const updatedUnit = { ...targetField[targetUnitIdx], currentHp: targetField[targetUnitIdx].currentHp - damage };
-      
-      // Check Burn hit apply
-      if (attacker.cardId === 'flame_ghost') {
-        updatedUnit.burn = 1;
-        addLog(`🔥 Flame Ghost applied Burn 1 to ${defCard.name}!`, 'effect');
-      }
-
-      targetField[targetUnitIdx] = updatedUnit;
-      copy[defenderPlayerIdx].field = targetField;
-      return copy;
-    });
-
-    // Check Splash
-    if (attacker.keywords.includes('splash')) {
-      addLog(`💥 Splash 1! All other enemy spirits take 1 damage.`, 'effect');
-      setPlayers(prev => {
-        const copy = [...prev];
-        copy[defenderPlayerIdx].field = copy[defenderPlayerIdx].field.map(u => {
-          if (u.instanceId === defender.instanceId) return u;
-          return { ...u, currentHp: u.currentHp - 1 };
-        });
-        return copy;
-      });
-    }
-  }, [addLog]);
-
-  // Clean up defeated units & check regen
-  const resolveDefeatedUnits = useCallback(() => {
-    setPlayers(prev => {
-      let changed = false;
-      const newPlayers = prev.map((player, pIdx) => {
-        const remainingField: FieldSpirit[] = [];
-        const newlyDefeated: FieldSpirit[] = [];
-
-        player.field.forEach(unit => {
-          if (unit.currentHp <= 0) {
-            newlyDefeated.push(unit);
-            changed = true;
-          } else {
-            remainingField.push(unit);
-          }
-        });
-
-        if (newlyDefeated.length > 0) {
-          newlyDefeated.forEach(dead => {
-            const def = BASE_CARDS[dead.cardId];
-            addLog(`💀 ${player.name}'s ${def.name} was defeated!`, 'defeat');
-
-            // Check Regen (become bone pile token)
-            if (dead.keywords.includes('regen') && dead.cardId === 'bones_ghost') {
-              addLog(`🦴 Bones Ghost leaves behind a Bone Pile token!`, 'effect');
-              remainingField.push({
-                instanceId: `token_bone_${Math.random().toString(36).substr(2, 5)}`,
-                cardId: 'bone_pile_token',
-                currentHp: 1,
-                maxHp: 1,
-                atk: 0,
-                def: 0,
-                keywords: ['token', 'regen'],
-                canAttackThisTurn: false,
-                summonedTurn: turnCount,
-                burn: 0,
-                originalOwner: dead.originalOwner
-              });
-            } else if (!dead.keywords.includes('token')) {
-              // Non-token enters discard pile
-              setDiscardPile(dp => [...dp, { instanceId: dead.instanceId, cardId: dead.cardId, originalOwner: dead.originalOwner }]);
-            }
-          });
-        }
-
-        return { ...player, field: remainingField };
-      });
-
-      return changed ? newPlayers : prev;
-    });
-  }, [addLog, turnCount]);
-
-  // Run cleanup whenever combat happens
   useEffect(() => {
     resolveDefeatedUnits();
   }, [players[0].field, players[1].field, resolveDefeatedUnits]);
 
-  // Draw Phase Logic
+  const checkReshuffle = useCallback((currentDeck: CardInstance[], currentDiscard: CardInstance[]) => {
+    if (currentDeck.length <= 4 && currentDiscard.length > 0) {
+      addLog(`♻️ Draw Jar low (${currentDeck.length} cards). Shuffling ${currentDiscard.length} discarded cards back in!`, 'system');
+      sounds.playCardDraw();
+      return { newDeck: shuffleDeck([...currentDeck, ...currentDiscard]), newDiscard: [] };
+    }
+
+    return { newDeck: currentDeck, newDiscard: currentDiscard };
+  }, [addLog]);
+
   const handleDrawPhase = useCallback(() => {
     setPlayers(prev => {
       const active = prev[currentPlayer];
-      if (active.hand.length >= 5) {
-        addLog(`⚠️ ${active.name}'s hand is full (5/5). Cannot draw.`, 'system');
+      if (active.hand.length >= HAND_LIMIT) {
+        addLog(`⚠️ ${active.name}'s hand is full (${HAND_LIMIT}/${HAND_LIMIT}). Cannot draw.`, 'system');
         setPhase('main');
         return prev;
       }
 
-      // Check reshuffle rule
       let currentDeck = [...sharedDeck];
       let currentDiscard = [...discardPile];
       const reshuffled = checkReshuffle(currentDeck, currentDiscard);
@@ -277,80 +404,39 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       setDiscardPile(currentDiscard);
 
       if (currentDeck.length === 0) {
-        addLog(`⚠️ Shared Jar is completely empty! No cards left to draw.`, 'system');
+        addLog('⚠️ Draw Jar is empty! No cards left to draw.', 'system');
         setPhase('main');
         return prev;
       }
 
       const drawnCard = currentDeck[0];
-      const remDeck = currentDeck.slice(1);
-      setSharedDeck(remDeck);
+      const remainingDeck = currentDeck.slice(1);
+      setSharedDeck(remainingDeck);
       sounds.playCardDraw();
 
       const def = BASE_CARDS[drawnCard.cardId];
       addLog(`🃏 ${active.name} drew a card${active.isBot ? '' : `: ${def.name}`}.`, 'turn');
 
-      const copy = [...prev];
+      const copy = clonePlayers(prev);
       copy[currentPlayer].hand = [...active.hand, drawnCard];
       setPhase('main');
       return copy;
     });
-  }, [currentPlayer, sharedDeck, discardPile, checkReshuffle, addLog]);
+  }, [addLog, checkReshuffle, currentPlayer, discardPile, sharedDeck]);
 
-  // Start Turn Logic
   const handleStartPhase = useCallback(() => {
     setPlayers(prev => {
-      const copy = [...prev];
+      const copy = clonePlayers(prev);
       const active = copy[currentPlayer];
+      const nextMaxPsy = Math.min(MAX_PSY, turnCount);
 
-      // 1. Refill & Increase Psy
-      const nextMaxPsy = Math.min(10, active.maxPsy + 1);
-      copy[currentPlayer].maxPsy = nextMaxPsy;
-      copy[currentPlayer].currentPsy = nextMaxPsy;
-      copy[currentPlayer].hasManifestedThisTurn = false;
-      copy[currentPlayer].hasAttackedThisTurn = false;
+      active.maxPsy = nextMaxPsy;
+      active.currentPsy = nextMaxPsy;
+      active.hasManifestedThisTurn = false;
+      active.hasAttackedThisTurn = false;
 
-      // 2. Refresh spirits attack eligibility
-      copy[currentPlayer].field = active.field.map(unit => ({
-        ...unit,
-        canAttackThisTurn: true
-      }));
-
-      // 3. Start of Turn effects (Bone pile revive)
-      let fieldCopy = [...copy[currentPlayer].field];
-      fieldCopy = fieldCopy.map(u => {
-        if (u.cardId === 'bone_pile_token') {
-          addLog(`✨ Start of turn: Bone Pile revives into Bones Ghost!`, 'effect');
-          sounds.playHeal();
-          return {
-            ...u,
-            cardId: 'bones_ghost',
-            currentHp: 3,
-            maxHp: 3,
-            atk: 2,
-            def: 1,
-            keywords: ['regen'],
-            canAttackThisTurn: false
-          };
-        }
-        return u;
-      });
-      copy[currentPlayer].field = fieldCopy;
-
-      return copy;
-    });
-
-    setPhase('draw');
-  }, [currentPlayer, addLog]);
-
-  // End Turn Logic
-  const handleEndTurn = useCallback(() => {
-    // 1. Resolve Burn
-    setPlayers(prev => {
-      const copy = [...prev];
-      const active = copy[currentPlayer];
-
-      let updatedField = active.field.map(unit => {
+      // Burn ticks at the start of the burned unit owner's turn, then clears.
+      active.field = active.field.map(unit => {
         if (unit.burn > 0) {
           addLog(`🔥 ${BASE_CARDS[unit.cardId].name} takes 1 Burn damage!`, 'effect');
           sounds.playBurn();
@@ -359,14 +445,142 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         return unit;
       });
 
-      // 2. End of Turn Effects
-      // Lantern Ghost: summon Wisp if no Wisps controlled
-      const hasLantern = updatedField.some(u => u.cardId === 'lantern_ghost' && u.currentHp > 0);
-      const hasWisp = updatedField.some(u => u.cardId === 'wisp_token' && u.currentHp > 0);
-      if (hasLantern && !hasWisp && updatedField.length < 3) {
-        addLog(`🏮 Lantern Ghost lures a Wisp token to the field!`, 'effect');
+      // Bone Pile revives at the start of its owner's turn if it survived burn/damage.
+      active.field = active.field.map(unit => {
+        if (unit.cardId === 'bone_pile_token' && unit.currentHp > 0) {
+          addLog('✨ Bone Pile revives into Bones Ghost!', 'effect');
+          sounds.playHeal();
+          return {
+            ...unit,
+            cardId: 'bones_ghost',
+            currentHp: BASE_CARDS.bones_ghost.hp,
+            maxHp: BASE_CARDS.bones_ghost.hp,
+            atk: BASE_CARDS.bones_ghost.atk,
+            def: BASE_CARDS.bones_ghost.def,
+            keywords: [...BASE_CARDS.bones_ghost.keywords],
+            canAttackThisTurn: false,
+            burn: 0
+          };
+        }
+        return unit;
+      });
+
+      // Existing non-token units ready up after start effects. New/revived units stay exhausted.
+      active.field = active.field.map(unit => ({
+        ...unit,
+        canAttackThisTurn: unit.summonedTurn < turnCount && unit.atk > 0 && unit.cardId !== 'bone_pile_token'
+      }));
+
+      return copy;
+    });
+
+    setSelectedAttackerId(null);
+    setPhase('draw');
+    resolveDefeatedUnits();
+  }, [addLog, currentPlayer, resolveDefeatedUnits, turnCount]);
+
+  const resolveEndOfTurnEffects = useCallback((playerIdx: 0 | 1) => {
+    setPlayers(prev => {
+      const copy = clonePlayers(prev);
+      const active = copy[playerIdx];
+      let updatedField = [...active.field];
+
+      const hasLantern = updatedField.some(unit => unit.cardId === 'lantern_ghost' && unit.currentHp > 0);
+      const hasWisp = updatedField.some(unit => unit.cardId === 'wisp_token' && unit.currentHp > 0);
+      if (hasLantern && !hasWisp && updatedField.length < FIELD_LIMIT) {
+        addLog('🏮 Lantern Ghost lures a Wisp token to the field!', 'effect');
         updatedField.push({
-          instanceId: `token_wisp_${Math.random().toString(36).substr(2, 5)}`,
+          instanceId: `token_wisp_${Math.random().toString(36).slice(2, 8)}`,
+          cardId: 'wisp_token',
+          currentHp: 1,
+          maxHp: 1,
+          atk: 1,
+          def: 0,
+          keywords: ['token'],
+          canAttackThisTurn: false,
+          summonedTurn: turnCount,
+          burn: 0,
+          originalOwner: playerIdx
+        });
+      }
+
+      const hasOldGhost = updatedField.some(unit => unit.cardId === 'old_ghost' && unit.currentHp > 0);
+      if (hasOldGhost && updatedField.filter(unit => unit.currentHp > 0).length > 1) {
+        addLog('👴 Old Ghost restores 1 Jar HP at end of turn.', 'effect');
+        sounds.playHeal();
+        active.jarHp = Math.min(STARTING_JAR_HP, active.jarHp + 1);
+      }
+
+      active.field = updatedField;
+      return copy;
+    });
+  }, [addLog, turnCount]);
+
+  const handleEndTurn = useCallback(() => {
+    resolveEndOfTurnEffects(currentPlayer);
+    resolveDefeatedUnits();
+
+    const nextPlayer = currentPlayer === 0 ? 1 : 0;
+    const nextTurnCount = nextPlayer === 0 ? turnCount + 1 : turnCount;
+    setCurrentPlayer(nextPlayer);
+    setTurnCount(nextTurnCount);
+    setSelectedHandCardId(null);
+    setSelectedAttackerId(null);
+    setReactionContext(null);
+    setPhase('start');
+    addLog(`--- Turn ${nextTurnCount}: ${players[nextPlayer].name}'s Turn ---`, 'turn');
+  }, [addLog, currentPlayer, players, resolveDefeatedUnits, resolveEndOfTurnEffects, turnCount]);
+
+  useEffect(() => {
+    if (winner || reactionContext) return;
+    if (phase === 'start') handleStartPhase();
+    if (phase === 'draw') handleDrawPhase();
+  }, [handleDrawPhase, handleStartPhase, phase, reactionContext, winner]);
+
+  const manifestCard = useCallback((instance: CardInstance) => {
+    if (phase !== 'main' || reactionContext || winner) return;
+    const active = players[currentPlayer];
+    const def = BASE_CARDS[instance.cardId];
+
+    if (active.hasManifestedThisTurn) {
+      addLog('⚠️ You already Manifested this turn.', 'system');
+      return;
+    }
+    if (active.field.length >= FIELD_LIMIT) {
+      addLog(`⚠️ Field is full (${FIELD_LIMIT}/${FIELD_LIMIT}). Cannot Manifest another spirit.`, 'system');
+      return;
+    }
+    if (active.currentPsy < def.cost) {
+      addLog(`⚠️ Not enough Psy (${active.currentPsy}/${def.cost}).`, 'system');
+      return;
+    }
+
+    sounds.playManifest();
+    addLog(`✨ ${active.name} Manifested ${def.name}! (Cost -${def.cost} Psy)`, 'manifest');
+
+    setPlayers(prev => {
+      const copy = clonePlayers(prev);
+      const player = copy[currentPlayer];
+      player.hand = player.hand.filter(card => card.instanceId !== instance.instanceId);
+      player.currentPsy -= def.cost;
+      player.hasManifestedThisTurn = true;
+
+      const newUnit = makeSpirit(instance, turnCount, currentPlayer);
+      player.field = [...player.field, newUnit];
+
+      if (def.id === 'loud_ghost') {
+        const enemyIdx = currentPlayer === 0 ? 1 : 0;
+        addLog('📢 Loud Ghost deals 1 damage to all enemy spirits!', 'effect');
+        copy[enemyIdx].field = copy[enemyIdx].field.map(unit => {
+          if (unit.keywords.includes('cat')) return unit;
+          return { ...unit, currentHp: unit.currentHp - 1 };
+        });
+      }
+
+      if (def.id === 'lantern_ghost' && player.field.length < FIELD_LIMIT) {
+        addLog('🏮 Lantern Ghost summons a Wisp token!', 'effect');
+        player.field.push({
+          instanceId: `token_wisp_${Math.random().toString(36).slice(2, 8)}`,
           cardId: 'wisp_token',
           currentHp: 1,
           maxHp: 1,
@@ -380,110 +594,10 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         });
       }
 
-      // Old Ghost: restore 1 Jar HP if control another spirit
-      const hasOldGhost = updatedField.some(u => u.cardId === 'old_ghost' && u.currentHp > 0);
-      if (hasOldGhost && updatedField.length > 1) {
-        addLog(`👴 Old Ghost restores 1 Jar HP at end of turn.`, 'effect');
+      if (def.id === 'old_ghost') {
+        addLog('👴 Old Ghost restores 2 Jar HP!', 'effect');
         sounds.playHeal();
-        copy[currentPlayer].jarHp = Math.min(20, copy[currentPlayer].jarHp + 1);
-      }
-
-      copy[currentPlayer].field = updatedField;
-      return copy;
-    });
-
-    // Cleanup dead units
-    resolveDefeatedUnits();
-
-    // Switch player. Turn count is a round number: P1 Turn 3 and AI Turn 3 both use 3/3 Psy.
-    const nextPlayer = currentPlayer === 0 ? 1 : 0;
-    const nextTurnCount = nextPlayer === 0 ? turnCount + 1 : turnCount;
-    setCurrentPlayer(nextPlayer);
-    setTurnCount(nextTurnCount);
-    setPhase('start');
-    setSelectedHandCardId(null);
-    setSelectedAttackerId(null);
-    addLog(`--- Turn ${nextTurnCount}: ${players[nextPlayer].name}'s Turn ---`, 'turn');
-  }, [currentPlayer, players, turnCount, addLog, resolveDefeatedUnits]);
-
-  // Phase transition hook
-  useEffect(() => {
-    if (winner || reactionContext) return;
-    if (phase === 'start') {
-      handleStartPhase();
-    } else if (phase === 'draw') {
-      handleDrawPhase();
-    }
-  }, [phase, winner, reactionContext, handleStartPhase, handleDrawPhase]);
-
-  // User Action: Manifest Card
-  const manifestCard = (instance: CardInstance) => {
-    if (phase !== 'main' || reactionContext || winner) return;
-    const active = players[currentPlayer];
-    const def = BASE_CARDS[instance.cardId];
-
-    if (active.field.length >= 3) {
-      addLog(`⚠️ Field is full (3/3). Cannot Manifest another spirit.`, 'system');
-      return;
-    }
-    if (active.currentPsy < def.cost) {
-      addLog(`⚠️ Not enough Psy (${active.currentPsy}/${def.cost}).`, 'system');
-      return;
-    }
-
-    sounds.playManifest();
-    addLog(`✨ ${active.name} Manifested ${def.name}! (Cost -${def.cost} Psy)`, 'manifest');
-
-    // Remove from hand, deduct Psy, add to field
-    setPlayers(prev => {
-      const copy = [...prev];
-      const p = copy[currentPlayer];
-      p.hand = p.hand.filter(c => c.instanceId !== instance.instanceId);
-      p.currentPsy -= def.cost;
-
-      const newUnit: FieldSpirit = {
-        instanceId: instance.instanceId,
-        cardId: def.id,
-        currentHp: def.hp,
-        maxHp: def.hp,
-        atk: def.atk,
-        def: def.def,
-        keywords: [...def.keywords],
-        canAttackThisTurn: def.keywords.includes('rush'),
-        summonedTurn: turnCount,
-        burn: 0,
-        originalOwner: instance.originalOwner
-      };
-
-      p.field = [...p.field, newUnit];
-      p.hasManifestedThisTurn = true;
-
-      // Manifest immediate effects
-      if (def.id === 'loud_ghost') {
-        // AoE 1 to enemy spirits
-        const enemyIdx = currentPlayer === 0 ? 1 : 0;
-        copy[enemyIdx].field = copy[enemyIdx].field.map(u => ({ ...u, currentHp: u.currentHp - 1 }));
-      } else if (def.id === 'lantern_ghost') {
-        if (p.field.length < 3) {
-          addLog(`🏮 Lantern Ghost summons a Wisp token!`, 'effect');
-          p.field.push({
-            instanceId: `token_wisp_${Math.random().toString(36).substr(2, 5)}`,
-            cardId: 'wisp_token',
-            currentHp: 1,
-            maxHp: 1,
-            atk: 1,
-            def: 0,
-            keywords: ['token'],
-            canAttackThisTurn: false,
-            summonedTurn: turnCount,
-            burn: 0,
-            originalOwner: currentPlayer
-          });
-        }
-      } else if (def.id === 'old_ghost') {
-        addLog(`👴 Old Ghost restores 2 Jar HP!`, 'effect');
-        sounds.playHeal();
-        p.jarHp += 2;
+        player.jarHp = Math.min(STARTING_JAR_HP, player.jarHp + 2);
       }
 
       return copy;
@@ -492,7 +606,6 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     setSelectedHandCardId(null);
     resolveDefeatedUnits();
 
-    // Check reaction trigger when enemy summons
     const enemyIdx = currentPlayer === 0 ? 1 : 0;
     triggerHoldReactionWindow({
       trigger: instance.cardId === 'wisp_token' ? 'when_enemy_summons_token' : 'when_enemy_summons',
@@ -500,37 +613,27 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       targetPlayerIndex: enemyIdx,
       sourceSpiritInstanceId: instance.instanceId
     });
-  };
+  }, [addLog, currentPlayer, phase, players, reactionContext, resolveDefeatedUnits, triggerHoldReactionWindow, turnCount, winner]);
 
-  // User Action: Select Attacker & Target
-  const handleTargetClick = (targetUnit?: FieldSpirit, isEnemyJar?: boolean) => {
+  const handleTargetClick = useCallback((targetUnit?: FieldSpirit, isEnemyJar?: boolean) => {
     if (phase !== 'attack' || !selectedAttackerId || reactionContext || winner) return;
     const active = players[currentPlayer];
     const enemyIdx = currentPlayer === 0 ? 1 : 0;
-    const enemyPlayer = players[enemyIdx];
+    const enemy = players[enemyIdx];
+    const attacker = active.field.find(unit => unit.instanceId === selectedAttackerId);
+    if (!attacker || !attacker.canAttackThisTurn) return;
 
-    const attacker = active.field.find(u => u.instanceId === selectedAttackerId);
-    if (!attacker) return;
-
-    // Validate Taunt target requirement
-    const enemyTaunts = enemyPlayer.field.filter(u => u.keywords.includes('taunt'));
-    if (targetUnit && enemyTaunts.length > 0 && !targetUnit.keywords.includes('taunt')) {
-      addLog(`⚠️ You must attack an enemy spirit with Taunt first!`, 'system');
-      return;
-    }
-
-    // Validate Jar attack
     if (isEnemyJar) {
-      if (enemyPlayer.field.length > 0) {
-        addLog(`⚠️ Cannot attack enemy Jar while opponent controls spirits!`, 'system');
+      if (enemy.field.length > 0) {
+        addLog('⚠️ Cannot attack enemy Jar while opponent controls spirits!', 'system');
         return;
       }
       if (attacker.keywords.includes('cat')) {
-        addLog(`⚠️ Cat Ghosts cannot attack the Jar!`, 'system');
+        addLog('⚠️ Cat Ghosts cannot attack the Jar!', 'system');
+        setSelectedAttackerId(null);
         return;
       }
 
-      // Check Reaction Window for Jar Damaged
       const hasReaction = triggerHoldReactionWindow({
         trigger: 'when_jar_damaged',
         sourcePlayerIndex: currentPlayer,
@@ -539,75 +642,80 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         incomingDamage: attacker.atk
       });
 
-      if (!hasReaction) {
-        sounds.playAttack();
-        addLog(`💥 ${BASE_CARDS[attacker.cardId].name} attacks enemy Jar directly for ${attacker.atk} damage!`, 'attack');
-        setPlayers(prev => {
-          const copy = [...prev];
-          copy[enemyIdx].jarHp -= attacker.atk;
-          copy[currentPlayer].hasAttackedThisTurn = true;
-          return copy;
-        });
-        setSelectedAttackerId(null);
-      }
+      if (!hasReaction) performJarAttack(attacker, currentPlayer);
       return;
     }
 
-    if (targetUnit) {
-      // Check reaction for enemy attacks
-      const hasReaction = triggerHoldReactionWindow({
-        trigger: 'when_enemy_attacks',
-        sourcePlayerIndex: currentPlayer,
-        targetPlayerIndex: enemyIdx,
-        sourceSpiritInstanceId: attacker.instanceId,
-        targetSpiritInstanceId: targetUnit.instanceId
-      });
-
-      if (!hasReaction) {
-        executeAttackDamage(attacker, targetUnit, currentPlayer);
-        setPlayers(prev => {
-          const copy = [...prev];
-          copy[currentPlayer].hasAttackedThisTurn = true;
-          return copy;
-        });
-        setSelectedAttackerId(null);
-      }
+    if (!targetUnit) return;
+    if (!hasValidUnitTarget(attacker, enemy, targetUnit)) {
+      addLog('⚠️ That is not a legal attack target.', 'system');
+      return;
     }
-  };
 
-  // Play Hold Reaction Card
-  const playHoldCard = (cardInst: CardInstance) => {
+    const hasReaction = triggerHoldReactionWindow({
+      trigger: 'when_enemy_attacks',
+      sourcePlayerIndex: currentPlayer,
+      targetPlayerIndex: enemyIdx,
+      sourceSpiritInstanceId: attacker.instanceId,
+      targetSpiritInstanceId: targetUnit.instanceId
+    });
+
+    if (!hasReaction) performUnitAttack(attacker, targetUnit, currentPlayer);
+  }, [addLog, currentPlayer, performJarAttack, performUnitAttack, phase, players, reactionContext, selectedAttackerId, triggerHoldReactionWindow, winner]);
+
+  const passReaction = useCallback(() => {
     if (!reactionContext) return;
-    const reactingPlayerIdx = reactionContext.targetPlayerIndex;
+    addLog(`${players[reactionContext.targetPlayerIndex].name} passed on the Reaction window.`, 'turn');
+
+    const sourcePlayerIdx = reactionContext.sourcePlayerIndex as 0 | 1;
+    const sourcePlayer = players[sourcePlayerIdx];
+    const attacker = sourcePlayer.field.find(unit => unit.instanceId === reactionContext.sourceSpiritInstanceId);
+
+    if (reactionContext.trigger === 'when_jar_damaged' && attacker) {
+      performJarAttack(attacker, sourcePlayerIdx);
+    } else if (reactionContext.trigger === 'when_enemy_attacks' && attacker && reactionContext.targetSpiritInstanceId) {
+      const targetPlayerIdx = reactionContext.targetPlayerIndex as 0 | 1;
+      const target = players[targetPlayerIdx].field.find(unit => unit.instanceId === reactionContext.targetSpiritInstanceId);
+      if (target) performUnitAttack(attacker, target, sourcePlayerIdx);
+    }
+
+    setReactionContext(null);
+    setSelectedAttackerId(null);
+    resolveDefeatedUnits();
+  }, [addLog, performJarAttack, performUnitAttack, players, reactionContext, resolveDefeatedUnits]);
+
+  const playHoldCard = useCallback((cardInst: CardInstance) => {
+    if (!reactionContext) return;
+    const reactingPlayerIdx = reactionContext.targetPlayerIndex as 0 | 1;
     const reactingPlayer = players[reactingPlayerIdx];
     const def = BASE_CARDS[cardInst.cardId];
 
     sounds.playManifest();
     addLog(`⚡ REACTION PLAYED: ${reactingPlayer.name} uses ${def.name} Hold effect!`, 'hold');
 
-    // Remove card from hand to discard
     setPlayers(prev => {
-      const copy = [...prev];
-      copy[reactingPlayerIdx].hand = copy[reactingPlayerIdx].hand.filter(c => c.instanceId !== cardInst.instanceId);
+      const copy = clonePlayers(prev);
+      copy[reactingPlayerIdx].hand = copy[reactingPlayerIdx].hand.filter(card => card.instanceId !== cardInst.instanceId);
       return copy;
     });
     setDiscardPile(dp => [...dp, cardInst]);
 
-    // Resolve specific hold effects
+    const sourcePlayerIdx = reactionContext.sourcePlayerIndex as 0 | 1;
+    const attacker = players[sourcePlayerIdx].field.find(unit => unit.instanceId === reactionContext.sourceSpiritInstanceId);
+
     if (def.id === 'soldier_ghost') {
-      // Redirect damage to summoned soldier ghost
-      addLog(`🛡️ Soldier Ghost manifests to intercept the incoming attack!`, 'effect');
+      addLog('🛡️ Soldier Ghost manifests to intercept the incoming attack!', 'effect');
       setPlayers(prev => {
-        const copy = [...prev];
-        if (copy[reactingPlayerIdx].field.length < 3) {
+        const copy = clonePlayers(prev);
+        if (copy[reactingPlayerIdx].field.length < FIELD_LIMIT) {
           copy[reactingPlayerIdx].field.push({
             instanceId: cardInst.instanceId,
             cardId: 'soldier_ghost',
-            currentHp: Math.max(1, 5 - (reactionContext.incomingDamage || 1)),
-            maxHp: 5,
-            atk: 1,
-            def: 2,
-            keywords: ['taunt'],
+            currentHp: Math.max(1, BASE_CARDS.soldier_ghost.hp - (reactionContext.incomingDamage || 1)),
+            maxHp: BASE_CARDS.soldier_ghost.hp,
+            atk: BASE_CARDS.soldier_ghost.atk,
+            def: BASE_CARDS.soldier_ghost.def,
+            keywords: [...BASE_CARDS.soldier_ghost.keywords],
             canAttackThisTurn: false,
             summonedTurn: turnCount,
             burn: 0,
@@ -616,57 +724,43 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         }
         return copy;
       });
+      if (attacker) exhaustAttacker(sourcePlayerIdx, attacker.instanceId);
     } else if (def.id === 'old_ghost') {
-      // Restore 2 Jar HP after damage
-      addLog(`👴 Old Ghost restores 2 Jar HP to survive!`, 'effect');
-      sounds.playHeal();
+      addLog('👴 Old Ghost restores 2 Jar HP before the Jar damage lands!', 'effect');
       setPlayers(prev => {
-        const copy = [...prev];
-        copy[reactingPlayerIdx].jarHp += 2;
-        if (reactionContext.incomingDamage && reactionContext.trigger === 'when_jar_damaged') {
-          copy[reactingPlayerIdx].jarHp -= reactionContext.incomingDamage;
-        }
+        const copy = clonePlayers(prev);
+        copy[reactingPlayerIdx].jarHp = Math.min(STARTING_JAR_HP, copy[reactingPlayerIdx].jarHp + 2);
         return copy;
       });
+      if (attacker) performJarAttack(attacker, sourcePlayerIdx);
     } else if (def.id === 'flame_ghost') {
-      // Apply Burn 1 to attacker
-      if (reactionContext.sourceSpiritInstanceId) {
-        addLog(`🔥 Flame Ghost sets the attacker ablaze with Burn 1!`, 'effect');
+      if (attacker) {
+        addLog('🔥 Flame Ghost sets the attacker ablaze with Burn 1!', 'effect');
         setPlayers(prev => {
-          const copy = [...prev];
-          const srcIdx = reactionContext.sourcePlayerIndex;
-          copy[srcIdx].field = copy[srcIdx].field.map(u => {
-            if (u.instanceId === reactionContext.sourceSpiritInstanceId) {
-              return { ...u, burn: 1 };
-            }
-            return u;
+          const copy = clonePlayers(prev);
+          copy[sourcePlayerIdx].field = copy[sourcePlayerIdx].field.map(unit => {
+            if (unit.instanceId !== attacker.instanceId) return unit;
+            return { ...unit, burn: 1 };
           });
           return copy;
         });
       }
-      // Resume pending attack
-      if (reactionContext.sourceSpiritInstanceId && reactionContext.targetSpiritInstanceId) {
-        const srcPlayer = players[reactionContext.sourcePlayerIndex];
-        const tgtPlayer = players[reactingPlayerIdx];
-        const atk = srcPlayer.field.find(u => u.instanceId === reactionContext.sourceSpiritInstanceId);
-        const defUnit = tgtPlayer.field.find(u => u.instanceId === reactionContext.targetSpiritInstanceId);
-        if (atk && defUnit) executeAttackDamage(atk, defUnit, reactionContext.sourcePlayerIndex);
+      if (attacker && reactionContext.targetSpiritInstanceId) {
+        const target = players[reactingPlayerIdx].field.find(unit => unit.instanceId === reactionContext.targetSpiritInstanceId);
+        if (target) performUnitAttack(attacker, target, sourcePlayerIdx);
       }
     } else if (def.id === 'loud_ghost') {
-      // AoE 1 to enemy tokens
-      addLog(`📢 Loud Ghost shatters all enemy tokens!`, 'effect');
-      const srcIdx = reactionContext.sourcePlayerIndex;
+      addLog('📢 Loud Ghost shatters all enemy tokens!', 'effect');
       setPlayers(prev => {
-        const copy = [...prev];
-        copy[srcIdx].field = copy[srcIdx].field.filter(u => !u.keywords.includes('token'));
+        const copy = clonePlayers(prev);
+        copy[sourcePlayerIdx].field = copy[sourcePlayerIdx].field.filter(unit => !unit.keywords.includes('token'));
         return copy;
       });
     } else if (def.id === 'bones_ghost') {
-      // Summon Bone Pile
-      addLog(`🦴 Bones Ghost rises from the defeated spirit!`, 'effect');
+      addLog('🦴 Bones Ghost leaves a Bone Pile behind!', 'effect');
       setPlayers(prev => {
-        const copy = [...prev];
-        if (copy[reactingPlayerIdx].field.length < 3) {
+        const copy = clonePlayers(prev);
+        if (copy[reactingPlayerIdx].field.length < FIELD_LIMIT) {
           copy[reactingPlayerIdx].field.push({
             instanceId: cardInst.instanceId,
             cardId: 'bone_pile_token',
@@ -684,150 +778,135 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         return copy;
       });
     } else if (def.id === 'cat_ghost') {
-      addLog(`🐾 Cat Ghost cancels the targeting effect!`, 'effect');
-    }
-
-    setReactionContext(null);
-    resolveDefeatedUnits();
-  };
-
-  const passReaction = () => {
-    if (!reactionContext) return;
-    addLog(`${players[reactionContext.targetPlayerIndex].name} passed on Reaction window.`, 'turn');
-    
-    // If incoming Jar damage was waiting
-    if (reactionContext.trigger === 'when_jar_damaged' && reactionContext.incomingDamage) {
-      const tgtIdx = reactionContext.targetPlayerIndex;
-      sounds.playAttack();
-      setPlayers(prev => {
-        const copy = [...prev];
-        copy[tgtIdx].jarHp -= reactionContext.incomingDamage!;
-        return copy;
-      });
-    } else if (reactionContext.trigger === 'when_enemy_attacks' && reactionContext.sourceSpiritInstanceId && reactionContext.targetSpiritInstanceId) {
-      const srcPlayer = players[reactionContext.sourcePlayerIndex];
-      const tgtPlayer = players[reactionContext.targetPlayerIndex];
-      const atk = srcPlayer.field.find(u => u.instanceId === reactionContext.sourceSpiritInstanceId);
-      const defUnit = tgtPlayer.field.find(u => u.instanceId === reactionContext.targetSpiritInstanceId);
-      if (atk && defUnit) executeAttackDamage(atk, defUnit, reactionContext.sourcePlayerIndex);
+      addLog('🐾 Cat Ghost cancels the targeting effect!', 'effect');
+      if (attacker) exhaustAttacker(sourcePlayerIdx, attacker.instanceId);
     }
 
     setReactionContext(null);
     setSelectedAttackerId(null);
     resolveDefeatedUnits();
-  };
+  }, [addLog, exhaustAttacker, performJarAttack, performUnitAttack, players, reactionContext, resolveDefeatedUnits, turnCount]);
 
-  // AI Opponent Turn Automation
+  useEffect(() => {
+    if (!selectedAttackerId) return;
+    const human = players[0];
+    const enemy = players[1];
+    const stillValid = getValidAttackers(human, enemy).some(unit => unit.instanceId === selectedAttackerId);
+    if (!stillValid) setSelectedAttackerId(null);
+  }, [players, selectedAttackerId]);
+
   useEffect(() => {
     if (winner || reactionContext) return;
     const active = players[currentPlayer];
     if (!active.isBot) return;
 
     const timer = setTimeout(() => {
-      if (phase === 'main' && !active.hasManifestedThisTurn) {
-        // Find best manifestable card
-        const playable = active.hand.filter(c => BASE_CARDS[c.cardId].cost <= active.currentPsy);
-        if (playable.length > 0 && active.field.length < 3) {
-          // pick highest cost
-          playable.sort((a, b) => BASE_CARDS[b.cardId].cost - BASE_CARDS[a.cardId].cost);
-          manifestCard(playable[0]);
-        } else {
-          setPhase('attack');
-        }
-      } else if (phase === 'attack' && !active.hasAttackedThisTurn) {
-        const readyAttacker = active.field.find(u => u.canAttackThisTurn);
-        if (readyAttacker) {
-          const p1 = players[0];
-          const taunts = p1.field.filter(u => u.keywords.includes('taunt'));
-          const target = taunts[0] || p1.field[0];
+      const enemyIdx = currentPlayer === 0 ? 1 : 0;
+      const enemy = players[enemyIdx];
 
-          if (target) {
-            const hasReaction = triggerHoldReactionWindow({
-              trigger: 'when_enemy_attacks',
-              sourcePlayerIndex: currentPlayer,
-              targetPlayerIndex: 0,
-              sourceSpiritInstanceId: readyAttacker.instanceId,
-              targetSpiritInstanceId: target.instanceId
-            });
+      if (phase === 'main') {
+        if (!active.hasManifestedThisTurn && active.field.length < FIELD_LIMIT) {
+          const playable = active.hand
+            .filter(card => BASE_CARDS[card.cardId].cost <= active.currentPsy)
+            .sort((a, b) => BASE_CARDS[b.cardId].cost - BASE_CARDS[a.cardId].cost);
 
-            if (!hasReaction) {
-              executeAttackDamage(readyAttacker, target, currentPlayer);
-              setPlayers(prev => {
-                const copy = [...prev];
-                copy[currentPlayer].hasAttackedThisTurn = true;
-                return copy;
-              });
-            }
-          } else {
-            const hasReaction = triggerHoldReactionWindow({
-              trigger: 'when_jar_damaged',
-              sourcePlayerIndex: currentPlayer,
-              targetPlayerIndex: 0,
-              sourceSpiritInstanceId: readyAttacker.instanceId,
-              incomingDamage: readyAttacker.atk
-            });
-
-            if (!hasReaction) {
-              sounds.playAttack();
-              addLog(`💥 ${BASE_CARDS[readyAttacker.cardId].name} attacks your Jar directly for ${readyAttacker.atk} damage!`, 'attack');
-              setPlayers(prev => {
-                const copy = [...prev];
-                copy[0].jarHp -= readyAttacker.atk;
-                copy[currentPlayer].hasAttackedThisTurn = true;
-                return copy;
-              });
-            }
+          if (playable.length > 0) {
+            manifestCard(playable[0]);
+            return;
           }
-        } else {
-          setPhase('react');
         }
-      } else if (phase === 'react') {
-        handleEndTurn();
+
+        setPhase('attack');
+        return;
       }
-    }, 1200);
+
+      if (phase === 'attack') {
+        const validAttackers = getValidAttackers(active, enemy);
+        if (validAttackers.length === 0) {
+          setPhase('react');
+          return;
+        }
+
+        const attacker = validAttackers[0];
+        const target = getBestAiTarget(attacker, enemy);
+
+        if (target) {
+          const hasReaction = triggerHoldReactionWindow({
+            trigger: 'when_enemy_attacks',
+            sourcePlayerIndex: currentPlayer,
+            targetPlayerIndex: enemyIdx,
+            sourceSpiritInstanceId: attacker.instanceId,
+            targetSpiritInstanceId: target.instanceId
+          });
+          if (!hasReaction) performUnitAttack(attacker, target, currentPlayer);
+          return;
+        }
+
+        if (enemy.field.length === 0 && !attacker.keywords.includes('cat')) {
+          const hasReaction = triggerHoldReactionWindow({
+            trigger: 'when_jar_damaged',
+            sourcePlayerIndex: currentPlayer,
+            targetPlayerIndex: enemyIdx,
+            sourceSpiritInstanceId: attacker.instanceId,
+            incomingDamage: attacker.atk
+          });
+          if (!hasReaction) performJarAttack(attacker, currentPlayer);
+          return;
+        }
+
+        setPhase('react');
+        return;
+      }
+
+      if (phase === 'react' || phase === 'end') {
+        handleEndTurn();
+        return;
+      }
+
+      // Absolute AI failsafe: no branch should leave the enemy UI stuck.
+      handleEndTurn();
+    }, 550);
 
     return () => clearTimeout(timer);
-  });
+  }, [currentPlayer, handleEndTurn, manifestCard, performJarAttack, performUnitAttack, phase, players, reactionContext, triggerHoldReactionWindow, winner]);
 
-  // AI Reaction Bot Automation
   useEffect(() => {
     if (!reactionContext) return;
     const reactingPlayer = players[reactionContext.targetPlayerIndex];
     if (!reactingPlayer.isBot) return;
 
     const timer = setTimeout(() => {
-      const usableHolds = reactingPlayer.hand.filter(c => {
-        const def = BASE_CARDS[c.cardId];
+      const usableHolds = reactingPlayer.hand.filter(card => {
+        const def = BASE_CARDS[card.cardId];
         return def && def.hasHold && def.holdTrigger === reactionContext.trigger;
       });
 
-      if (usableHolds.length > 0) {
-        playHoldCard(usableHolds[0]);
-      } else {
-        passReaction();
-      }
-    }, 1000);
+      if (usableHolds.length > 0) playHoldCard(usableHolds[0]);
+      else passReaction();
+    }, 700);
 
     return () => clearTimeout(timer);
-  });
+  }, [passReaction, playHoldCard, players, reactionContext]);
 
-  const activePlayer = players[currentPlayer];
   const humanPlayer = players[0];
   const computerPlayer = players[1];
   const isHumanTurn = currentPlayer === 0;
   const humanCanAct = isHumanTurn && !winner;
+  const selectedAttacker = humanPlayer.field.find(unit => unit.instanceId === selectedAttackerId);
+  const canAttackEnemyJar = !!selectedAttacker && computerPlayer.field.length === 0 && !selectedAttacker.keywords.includes('cat');
+  const humanValidAttackers = getValidAttackers(humanPlayer, computerPlayer);
 
-  // Helper to determine if a card in Player 1's hand is usable in a reaction window.
-  const isCardUsableReaction = (c: CardInstance) => {
+  const isCardUsableReaction = (card: CardInstance) => {
     if (!reactionContext) return false;
     if (reactionContext.targetPlayerIndex !== 0) return false;
-    const def = BASE_CARDS[c.cardId];
+    const def = BASE_CARDS[card.cardId];
     return def && def.hasHold && def.holdTrigger === reactionContext.trigger;
   };
 
+  const unitCardClass = '!w-36 !h-48 sm:!w-40 sm:!h-52';
+
   return (
-    <div className="flex flex-col h-[768px] w-full max-w-[1024px] mx-auto bg-[#0f172a] text-slate-100 font-sans overflow-hidden border-8 border-[#1e293b] rounded-2xl shadow-2xl relative select-none">
-      {/* Game Over Modal Overlay */}
+    <div className="flex flex-col h-[calc(100vh-92px)] min-h-[640px] max-h-[900px] w-full max-w-[1180px] mx-auto bg-[#0f172a] text-slate-100 font-sans overflow-hidden border-4 sm:border-8 border-[#1e293b] rounded-2xl shadow-2xl relative select-none">
       {winner && (
         <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-8 animate-fade-in">
           <div className="text-8xl mb-4 animate-bounce">🏆</div>
@@ -846,137 +925,134 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         </div>
       )}
 
-      {/* Opponent Top Bar */}
-      <div className="flex justify-between items-center p-4 bg-[#1e1b4b] border-b border-cyan-500/30 shrink-0">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-indigo-500 flex items-center justify-center border-2 border-slate-300 font-black text-xl text-white shadow">
-            P{computerPlayer.id}
+      <div className="flex justify-between items-center px-4 py-2 bg-[#1e1b4b] border-b border-cyan-500/30 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-indigo-500 flex items-center justify-center border-2 border-slate-300 font-black text-white shadow">
+            AI
           </div>
           <div>
-            <div className="text-xs uppercase tracking-widest text-slate-400">
-              Opponent (AI Bot)
-            </div>
-            <div className="text-xl font-bold text-cyan-400">{computerPlayer.name}</div>
+            <div className="text-[10px] uppercase tracking-widest text-slate-400">Opponent</div>
+            <div className="text-lg font-bold text-cyan-400">{computerPlayer.name}</div>
           </div>
         </div>
 
-        <div className="flex gap-8">
-          <div className="flex flex-col items-center">
-            <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Jar HP</div>
-            <div className="text-3xl font-black text-rose-500 font-mono">
-              {computerPlayer.jarHp < 10 ? `0${computerPlayer.jarHp}` : computerPlayer.jarHp} <span className="text-lg opacity-50">/ 12</span>
+        <div className="flex items-center gap-5">
+          <div className="text-center font-mono">
+            <div className="text-[9px] text-slate-400 uppercase tracking-widest font-bold">Jar HP</div>
+            <div className="text-2xl font-black text-rose-500">
+              {computerPlayer.jarHp < 10 ? `0${computerPlayer.jarHp}` : computerPlayer.jarHp}<span className="text-sm opacity-50">/{STARTING_JAR_HP}</span>
             </div>
           </div>
-          <div className="flex flex-col items-center">
-            <div className="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Psy</div>
-            <div className="text-3xl font-black text-cyan-400 font-mono">
-              {computerPlayer.currentPsy < 10 ? `0${computerPlayer.currentPsy}` : computerPlayer.currentPsy} <span className="text-lg opacity-50">/ {computerPlayer.maxPsy}</span>
+          <div className="text-center font-mono">
+            <div className="text-[9px] text-slate-400 uppercase tracking-widest font-bold">Psy</div>
+            <div className="text-2xl font-black text-cyan-400">
+              {computerPlayer.currentPsy < 10 ? `0${computerPlayer.currentPsy}` : computerPlayer.currentPsy}<span className="text-sm opacity-50">/{computerPlayer.maxPsy}</span>
             </div>
           </div>
-        </div>
-
-        {/* Opponent Hand Card Backs */}
-        <div className="flex gap-1.5 items-center">
-          {computerPlayer.hand.map((_, idx) => (
-            <div
-              key={idx}
-              className="w-8 h-12 bg-[#312e81] rounded border border-cyan-800 shadow-md flex items-center justify-center text-[10px] opacity-90"
-            >
-              🏺
-            </div>
-          ))}
-          {computerPlayer.hand.length === 0 && <span className="text-xs text-slate-500 italic">0 cards</span>}
+          <div className="flex gap-1.5 items-center">
+            {computerPlayer.hand.map((_, idx) => (
+              <div key={idx} className="w-7 h-10 bg-[#312e81] rounded border border-cyan-800 shadow-md flex items-center justify-center text-[10px] opacity-90">
+                🏺
+              </div>
+            ))}
+            {computerPlayer.hand.length === 0 && <span className="text-xs text-slate-500 italic">0 cards</span>}
+          </div>
         </div>
       </div>
 
-      {/* Main Game Field */}
-      <div className="relative flex-1 grid grid-cols-[1fr_260px] p-4 gap-4 overflow-hidden">
-        {/* Battlefield Canvas */}
-        <div className="flex flex-col justify-between overflow-y-auto pr-1">
-          {/* Opponent Slots (Row 1) */}
-          <div className="flex justify-center gap-6 items-center">
-            {[0, 1, 2].map(slotIdx => {
-              const unit = computerPlayer.field[slotIdx];
-              const isTauntReq = humanCanAct && phase === 'attack' && selectedAttackerId && computerPlayer.field.some(u => u.keywords.includes('taunt'));
-              const canBeTargeted = humanCanAct && phase === 'attack' && selectedAttackerId && (!isTauntReq || unit?.keywords.includes('taunt'));
+      <div className="relative flex-1 grid grid-cols-[1fr_240px] xl:grid-cols-[1fr_270px] p-3 gap-3 overflow-hidden">
+        <div className="flex flex-col justify-between overflow-hidden pr-1 gap-2">
+          <div className="flex justify-center items-center gap-4 shrink-0">
+            <JarTarget
+              label="Enemy Jar"
+              hp={computerPlayer.jarHp}
+              maxHp={STARTING_JAR_HP}
+              owner="enemy"
+              isClickable={humanCanAct && phase === 'attack' && canAttackEnemyJar}
+              onClick={() => handleTargetClick(undefined, true)}
+            />
+            <div className="flex justify-center gap-3 items-center">
+              {[0, 1, 2].map(slotIdx => {
+                const unit = computerPlayer.field[slotIdx];
+                const canBeTargeted = !!(
+                  humanCanAct &&
+                  phase === 'attack' &&
+                  selectedAttacker &&
+                  unit &&
+                  hasValidUnitTarget(selectedAttacker, computerPlayer, unit)
+                );
 
-              return (
-                <FieldUnitView
-                  key={`opp_slot_${slotIdx}`}
-                  slotIndex={slotIdx}
-                  spirit={unit}
-                  isEmpty={!unit}
-                  isTargetable={!!canBeTargeted && !!unit}
-                  onClick={() => canBeTargeted && handleTargetClick(unit)}
-                />
-              );
-            })}
+                return (
+                  <FieldUnitView
+                    key={`opp_slot_${slotIdx}`}
+                    slotIndex={slotIdx}
+                    spirit={unit}
+                    isEmpty={!unit}
+                    isTargetable={canBeTargeted}
+                    onClick={() => canBeTargeted && handleTargetClick(unit)}
+                    className={unitCardClass}
+                  />
+                );
+              })}
+            </div>
           </div>
 
-          {/* Shared Deck & Discard Center Rail */}
-          <div className="flex justify-center items-center gap-12 py-3 my-auto">
-            {/* Direct Jar Attack Target area */}
-            {humanCanAct && phase === 'attack' && selectedAttackerId && computerPlayer.field.length === 0 && (
-              <div
-                onClick={() => handleTargetClick(undefined, true)}
-                className="absolute left-1/3 -translate-x-1/2 px-6 py-3 bg-rose-600 hover:bg-rose-500 border-2 border-white rounded-xl shadow-[0_0_30px_rgba(244,63,94,0.9)] text-white font-black uppercase text-sm tracking-widest animate-bounce cursor-pointer z-30"
-              >
-                ⚔️ ATTACK ENEMY JAR DIRECTLY
-              </div>
-            )}
-
+          <div className="flex justify-center items-center gap-8 py-1 shrink-0">
             <div className="text-center group">
-              <div className="w-24 h-32 bg-[#312e81] rounded-lg border-2 border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.5)] flex flex-col items-center justify-center relative transition-transform group-hover:scale-105">
-                <div className="text-4xl">🏺</div>
+              <div className="w-20 h-28 bg-[#312e81] rounded-lg border-2 border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.5)] flex flex-col items-center justify-center relative transition-transform group-hover:scale-105">
+                <div className="text-3xl">🏺</div>
                 <div className="absolute -top-3 -right-3 w-7 h-7 rounded-full bg-cyan-500 flex items-center justify-center font-black text-xs text-slate-950 shadow">
                   {sharedDeck.length}
                 </div>
               </div>
-              <div className="text-[10px] uppercase mt-1.5 font-bold text-cyan-400 tracking-widest">
-                Shared Jar
-              </div>
+              <div className="text-[10px] uppercase mt-1 font-bold text-cyan-400 tracking-widest">Draw Jar</div>
             </div>
 
             <div className="text-center group">
-              <div className="w-24 h-32 bg-slate-900 rounded-lg border-2 border-slate-700 flex flex-col items-center justify-center grayscale opacity-70 transition-opacity group-hover:opacity-100">
+              <div className="w-20 h-28 bg-slate-900 rounded-lg border-2 border-slate-700 flex flex-col items-center justify-center grayscale opacity-70 transition-opacity group-hover:opacity-100">
                 <div className="text-3xl">💀</div>
                 <div className="text-[10px] font-mono text-slate-400 mt-1">{discardPile.length}</div>
               </div>
-              <div className="text-[10px] uppercase mt-1.5 font-bold text-slate-500 tracking-widest">
-                Discard
-              </div>
+              <div className="text-[10px] uppercase mt-1 font-bold text-slate-500 tracking-widest">Discard</div>
             </div>
           </div>
 
-          {/* Player Slots (Row 3) */}
-          <div className="flex justify-center gap-6 items-center">
-            {[0, 1, 2].map(slotIdx => {
-              const unit = humanPlayer.field[slotIdx];
-              const isEligibleAttacker = humanCanAct && phase === 'attack' && unit?.canAttackThisTurn && !humanPlayer.hasAttackedThisTurn;
+          <div className="flex justify-center items-center gap-4 shrink-0">
+            <JarTarget label="Your Jar" hp={humanPlayer.jarHp} maxHp={STARTING_JAR_HP} owner="player" />
+            <div className="flex justify-center gap-3 items-center">
+              {[0, 1, 2].map(slotIdx => {
+                const unit = humanPlayer.field[slotIdx];
+                const isEligibleAttacker = !!(humanCanAct && phase === 'attack' && unit && getValidAttackers(humanPlayer, computerPlayer).some(attacker => attacker.instanceId === unit.instanceId));
 
-              return (
-                <FieldUnitView
-                  key={`player_slot_${slotIdx}`}
-                  slotIndex={slotIdx}
-                  spirit={unit}
-                  isEmpty={!unit}
-                  canAttack={!!isEligibleAttacker && !selectedAttackerId}
-                  isSelectedForAttack={selectedAttackerId === unit?.instanceId}
-                  onClick={() => {
-                    if (isEligibleAttacker) {
-                      sounds.playCardDraw();
-                      setSelectedAttackerId(selectedAttackerId === unit.instanceId ? null : unit.instanceId);
-                    }
-                  }}
-                />
-              );
-            })}
+                return (
+                  <FieldUnitView
+                    key={`player_slot_${slotIdx}`}
+                    slotIndex={slotIdx}
+                    spirit={unit}
+                    isEmpty={!unit}
+                    canAttack={isEligibleAttacker && !selectedAttackerId}
+                    isSelectedForAttack={selectedAttackerId === unit?.instanceId}
+                    onClick={() => {
+                      if (!unit) return;
+                      if (selectedAttackerId === unit.instanceId) {
+                        setSelectedAttackerId(null);
+                        return;
+                      }
+                      if (isEligibleAttacker) {
+                        sounds.playCardDraw();
+                        setSelectedAttackerId(unit.instanceId);
+                      }
+                    }}
+                    className={unitCardClass}
+                  />
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        {/* Sidebar Log & Actions */}
-        <div className="flex flex-col gap-4 bg-[#020617] border-l border-slate-800 p-4 rounded-xl overflow-hidden">
-          <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex flex-col gap-3 bg-[#020617] border-l border-slate-800 p-3 rounded-xl overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden min-h-0">
             <div className="flex justify-between items-center mb-2">
               <span className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">Battle Log</span>
               <span className="text-[10px] font-mono text-cyan-400">Turn {turnCount}</span>
@@ -1007,11 +1083,19 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
             </div>
           </div>
 
-          {/* Reaction Prompts or Action Buttons */}
           <div className="space-y-2 shrink-0 pt-2 border-t border-slate-800">
             <div className="text-center py-1.5 text-[10px] bg-cyan-900/40 border border-cyan-800/60 text-cyan-300 font-bold uppercase rounded tracking-widest">
               Phase: <span className="text-white">{reactionContext ? '⚠️ REACTION' : phase.toUpperCase()}</span>
             </div>
+
+            {selectedAttacker && !reactionContext && (
+              <button
+                onClick={() => setSelectedAttackerId(null)}
+                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 font-black rounded-lg text-xs uppercase tracking-widest"
+              >
+                Cancel Attack
+              </button>
+            )}
 
             {reactionContext ? (
               <div className="space-y-2">
@@ -1037,27 +1121,30 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
                   className={`w-full py-3 font-bold text-xs rounded-xl transition-all uppercase tracking-wider ${
                     phase === 'main'
                       ? 'bg-cyan-500 text-slate-950 shadow-[0_0_15px_rgba(6,182,212,0.4)] cursor-default'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer'
+                      : humanCanAct
+                      ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer'
+                      : 'bg-slate-900 text-slate-600 cursor-not-allowed'
                   }`}
                 >
-                  1. MANIFEST (MAIN)
+                  1. Manifest
                 </button>
 
                 <button
                   onClick={() => {
                     sounds.playCardDraw();
+                    setSelectedAttackerId(null);
                     setPhase('attack');
                   }}
-                  disabled={phase === 'attack' || !humanCanAct || humanPlayer.field.filter(u => u.canAttackThisTurn).length === 0}
+                  disabled={phase === 'attack' || !humanCanAct || humanValidAttackers.length === 0}
                   className={`w-full py-3 font-bold text-xs rounded-xl transition-all uppercase tracking-wider ${
                     phase === 'attack'
                       ? 'bg-cyan-500 text-slate-950 shadow-[0_0_15px_rgba(6,182,212,0.4)] cursor-default'
-                      : humanPlayer.field.filter(u => u.canAttackThisTurn).length === 0
+                      : humanValidAttackers.length === 0 || !humanCanAct
                       ? 'bg-slate-900 text-slate-600 cursor-not-allowed'
                       : 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg cursor-pointer'
                   }`}
                 >
-                  2. ATTACK PHASE
+                  2. Attack With Ready Spirits
                 </button>
 
                 <button
@@ -1070,18 +1157,24 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
                   className={`w-full py-3 font-bold text-xs rounded-xl transition-all uppercase tracking-wider ${
                     phase === 'react'
                       ? 'bg-amber-500 text-slate-950 shadow-[0_0_15px_rgba(245,158,11,0.5)] cursor-default'
-                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer'
+                      : humanCanAct
+                      ? 'bg-slate-800 hover:bg-slate-700 text-slate-300 cursor-pointer'
+                      : 'bg-slate-900 text-slate-600 cursor-not-allowed'
                   }`}
                 >
-                  3. REACT PHASE
+                  3. React / Done Attacking
                 </button>
 
                 <button
                   onClick={handleEndTurn}
                   disabled={!humanCanAct}
-                  className="w-full py-3.5 bg-indigo-800 hover:bg-indigo-700 text-white font-black text-xs tracking-widest uppercase rounded-xl shadow-lg transition-all cursor-pointer border border-indigo-600"
+                  className={`w-full py-3.5 text-white font-black text-xs tracking-widest uppercase rounded-xl shadow-lg transition-all border ${
+                    humanCanAct
+                      ? 'bg-indigo-800 hover:bg-indigo-700 cursor-pointer border-indigo-600'
+                      : 'bg-slate-900 text-slate-600 cursor-not-allowed border-slate-800'
+                  }`}
                 >
-                  END TURN ➔
+                  {isHumanTurn ? 'End Turn ➔' : 'AI Thinking…'}
                 </button>
               </>
             )}
@@ -1089,13 +1182,10 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         </div>
       </div>
 
-      {/* Player Hand Bottom Area */}
-      <div className="h-64 bg-[#1e1b4b] border-t-2 border-cyan-500 p-4 flex gap-4 items-end shrink-0">
-        <div className="flex-1 flex justify-center gap-3 -mb-8 overflow-x-auto pt-4 px-2">
+      <div className="h-48 sm:h-52 bg-[#1e1b4b] border-t-2 border-cyan-500 p-3 flex gap-3 items-end shrink-0">
+        <div className="flex-1 flex justify-center gap-2 overflow-x-auto pt-4 px-2 pb-2">
           {humanPlayer.hand.length === 0 ? (
-            <div className="text-slate-500 italic text-xs self-center pb-8">
-              No cards in hand. Draw on next turn.
-            </div>
+            <div className="text-slate-500 italic text-xs self-center pb-8">No cards in hand. Draw on next turn.</div>
           ) : (
             humanPlayer.hand.map(cardInst => {
               const def = BASE_CARDS[cardInst.cardId];
@@ -1103,11 +1193,18 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
 
               const isReactionWindow = !!reactionContext && reactionContext.targetPlayerIndex === 0;
               const usableInReaction = isCardUsableReaction(cardInst);
-              const canPlayManifest = humanCanAct && phase === 'main' && !reactionContext && humanPlayer.currentPsy >= def.cost && humanPlayer.field.length < 3 && !humanPlayer.hasManifestedThisTurn;
+              const canPlayManifest = !!(
+                humanCanAct &&
+                phase === 'main' &&
+                !reactionContext &&
+                humanPlayer.currentPsy >= def.cost &&
+                humanPlayer.field.length < FIELD_LIMIT &&
+                !humanPlayer.hasManifestedThisTurn
+              );
 
               let disabledReason: string | undefined;
               if (phase !== 'main' && !isReactionWindow) disabledReason = 'Can only Manifest during Main phase';
-              else if (humanPlayer.field.length >= 3) disabledReason = 'Field full (3/3 slots)';
+              else if (humanPlayer.field.length >= FIELD_LIMIT) disabledReason = `Field full (${FIELD_LIMIT}/${FIELD_LIMIT} slots)`;
               else if (humanPlayer.currentPsy < def.cost) disabledReason = `Need ${def.cost} Psy (${humanPlayer.currentPsy}/${def.cost})`;
               else if (humanPlayer.hasManifestedThisTurn) disabledReason = 'Already Manifested 1 spirit this turn';
 
@@ -1120,33 +1217,33 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
                   onClick={() => {
                     if (usableInReaction) playHoldCard(cardInst);
                     else if (canPlayManifest) manifestCard(cardInst);
+                    setSelectedHandCardId(cardInst.instanceId);
                   }}
                   onHoldClick={() => usableInReaction && playHoldCard(cardInst)}
-                  disabledReason={(!canPlayManifest && !usableInReaction) ? disabledReason : undefined}
+                  disabledReason={!canPlayManifest && !usableInReaction ? disabledReason : undefined}
+                  className="!w-36 !h-44 sm:!w-40 sm:!h-48 text-[10px]"
                 />
               );
             })
           )}
         </div>
 
-        {/* Player Controls Rail */}
-        <div className="flex flex-col items-center justify-center p-4 bg-indigo-950/80 rounded-xl border border-cyan-500/30 ml-auto w-44 shadow-lg shrink-0 mb-4">
+        <div className="flex flex-col items-center justify-center p-3 bg-indigo-950/80 rounded-xl border border-cyan-500/30 ml-auto w-40 shadow-lg shrink-0 mb-2">
           <div className="flex gap-4 mb-2">
             <div className="text-center font-mono">
               <div className="text-[9px] uppercase tracking-wider text-slate-400">Jar HP</div>
               <div className="text-2xl font-black text-rose-400">
-                {humanPlayer.jarHp < 10 ? `0${humanPlayer.jarHp}` : humanPlayer.jarHp} <span className="text-xs opacity-40">/ 12</span>
+                {humanPlayer.jarHp < 10 ? `0${humanPlayer.jarHp}` : humanPlayer.jarHp}<span className="text-xs opacity-40">/{STARTING_JAR_HP}</span>
               </div>
             </div>
             <div className="text-center font-mono">
               <div className="text-[9px] uppercase tracking-wider text-slate-400">Psy</div>
               <div className="text-2xl font-black text-cyan-400">
-                {humanPlayer.currentPsy < 10 ? `0${humanPlayer.currentPsy}` : humanPlayer.currentPsy} <span className="text-xs opacity-40">/ {humanPlayer.maxPsy}</span>
+                {humanPlayer.currentPsy < 10 ? `0${humanPlayer.currentPsy}` : humanPlayer.currentPsy}<span className="text-xs opacity-40">/{humanPlayer.maxPsy}</span>
               </div>
             </div>
           </div>
 
-          {/* Psy Mana Bar */}
           <div className="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-slate-800">
             <div
               className="bg-gradient-to-r from-cyan-500 to-teal-400 h-full transition-all duration-300"
@@ -1154,9 +1251,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
             />
           </div>
 
-          <div className="mt-2 text-[9px] uppercase tracking-widest text-cyan-300 font-bold text-center">
-            {humanPlayer.name}
-          </div>
+          <div className="mt-2 text-[9px] uppercase tracking-widest text-cyan-300 font-bold text-center">{humanPlayer.name}</div>
+          {selectedHandCardId && <div className="text-[8px] text-slate-500 mt-1">Selected card</div>}
         </div>
       </div>
     </div>
