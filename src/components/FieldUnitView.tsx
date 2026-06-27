@@ -77,7 +77,7 @@ export function FieldUnitView({
         </div>
         {hasBurn && (
           <span className="px-1.5 py-0.5 bg-rose-600 rounded text-[9px] font-black text-white shadow animate-bounce">
-            🔥 BURN 1
+            🔥 BURN {spirit.burn}
           </span>
         )}
       </div>

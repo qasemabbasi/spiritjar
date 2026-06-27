@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { CardDefinition, CardInstance, FieldSpirit, PlayerState, TurnPhase, GameLogEntry, ReactionContext } from '../types';
 import { BASE_CARDS } from '../data/cards';
 import { CardView } from './CardView';
@@ -197,6 +197,7 @@ function CardDetailPreview({ card }: { card: CardDefinition | null }) {
           <div className="text-slate-400">No special rules.</div>
         )}
       </div>
+
     </div>
   );
 }
@@ -279,12 +280,12 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
 
   const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
   const [hoveredCard, setHoveredCard] = useState<CardDefinition | null>(null);
+  const [pendingTargetHoldCard, setPendingTargetHoldCard] = useState<CardInstance | null>(null);
   const [autoplay, setAutoplay] = useState<boolean>(false);
   const [selectedAttackerId, setSelectedAttackerId] = useState<string | null>(null);
   const [reactionContext, setReactionContext] = useState<ReactionContext | null>(null);
   const [lastDestroyedGhosts, setLastDestroyedGhosts] = useState<Array<CardInstance | null>>([null, null]);
   const [log, setLog] = useState<GameLogEntry[]>([]);
-  const logEndRef = useRef<HTMLDivElement>(null);
 
   const addLog = useCallback((text: string, type: GameLogEntry['type']) => {
     setLog(prev => [
@@ -472,9 +473,6 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     addLog('Player 1 begins Turn 1.', 'turn');
   }, [p1Selected, p2Selected, addLog]);
 
-  useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [log]);
 
   useEffect(() => {
     if (winner) return;
@@ -656,6 +654,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     setTurnCount(nextTurnCount);
     setSelectedHandCardId(null);
     setSelectedAttackerId(null);
+    setHoveredCard(null);
+    setPendingTargetHoldCard(null);
     setReactionContext(null);
     setPhase('start');
     addLog(`--- Turn ${nextTurnCount}: ${players[nextPlayer].name}'s Turn ---`, 'turn');
@@ -668,6 +668,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
   }, [handleDrawPhase, handleStartPhase, phase, reactionContext, winner]);
 
   const manifestCard = useCallback((instance: CardInstance) => {
+    setHoveredCard(null);
+    setPendingTargetHoldCard(null);
     if (phase !== 'main' || reactionContext || winner) return;
     const active = players[currentPlayer];
     const def = BASE_CARDS[instance.cardId];
@@ -825,6 +827,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
   }, [addLog, currentPlayer, performJarAttack, performUnitAttack, phase, players, reactionContext, selectedAttackerId, triggerHoldReactionWindow, winner]);
 
   const playReactHoldCard = useCallback((cardInst: CardInstance, playerIdx: 0 | 1) => {
+    setHoveredCard(null);
+    setPendingTargetHoldCard(null);
     const def = BASE_CARDS[cardInst.cardId];
     const player = players[playerIdx];
 
@@ -884,6 +888,46 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     resolveDefeatedUnits();
   }, [addLog, lastDestroyedGhosts, players, resolveDefeatedUnits, turnCount]);
 
+
+  const playTargetedReactHoldCard = useCallback((cardInst: CardInstance, targetId: string, playerIdx: 0 | 1) => {
+    const def = BASE_CARDS[cardInst.cardId];
+    const player = players[playerIdx];
+
+    if (!def.hasHold || def.holdTrigger !== 'react_phase') return;
+    if (def.id !== 'sword_ghost') return;
+
+    sounds.playManifest();
+    addLog(`⚡ REACT PLAYED: ${player.name} uses ${def.name} Hold effect!`, 'hold');
+
+    setPlayers(prev => {
+      const copy = clonePlayers(prev);
+      const active = copy[playerIdx];
+      const target = active.field.find(unit => unit.instanceId === targetId && unit.currentHp > 0);
+
+      active.hand = active.hand.filter(card => card.instanceId !== cardInst.instanceId);
+
+      if (!target) {
+        addLog('⚠️ Sword Ghost had no valid friendly target.', 'system');
+        return copy;
+      }
+
+      active.field = active.field.map(unit => {
+        if (unit.instanceId !== targetId) return unit;
+        return { ...unit, atk: unit.atk + 2 };
+      });
+
+      addLog(`🗡️ Sword Ghost gives ${BASE_CARDS[target.cardId].name} +2 ATK.`, 'effect');
+      return copy;
+    });
+
+    setDiscardPile(dp => [...dp, cardInst]);
+    setSelectedHandCardId(null);
+    setSelectedAttackerId(null);
+    setHoveredCard(null);
+    setPendingTargetHoldCard(null);
+    resolveDefeatedUnits();
+  }, [addLog, players, resolveDefeatedUnits]);
+
   const passReaction = useCallback(() => {
     if (!reactionContext) return;
     addLog(`${players[reactionContext.targetPlayerIndex].name} passed on the Reaction window.`, 'turn');
@@ -906,6 +950,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
   }, [addLog, performJarAttack, performUnitAttack, players, reactionContext, resolveDefeatedUnits]);
 
   const playHoldCard = useCallback((cardInst: CardInstance) => {
+    setHoveredCard(null);
+    setPendingTargetHoldCard(null);
     if (!reactionContext) return;
     const reactingPlayerIdx = reactionContext.targetPlayerIndex as 0 | 1;
     const reactingPlayer = players[reactingPlayerIdx];
@@ -1168,7 +1214,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
   const unitCardClass = '!w-28 !h-40 lg:!w-32 lg:!h-44';
 
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)] min-h-[620px] max-h-[920px] w-full max-w-[1500px] mx-auto bg-[#0f172a] text-slate-100 font-sans overflow-hidden border-4 sm:border-8 border-[#1e293b] rounded-2xl shadow-2xl relative select-none">
+    <div className="flex flex-col min-h-[620px] w-full max-w-[1500px] mx-auto bg-[#0f172a] text-slate-100 font-sans overflow-visible border-4 sm:border-8 border-[#1e293b] rounded-2xl shadow-2xl relative select-none">
       {winner && (
         <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-8 animate-fade-in">
           <div className="text-8xl mb-4 animate-bounce">🏆</div>
@@ -1222,7 +1268,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         </div>
       </div>
 
-      <div className="relative flex-1 grid grid-cols-[1fr_210px] xl:grid-cols-[1fr_230px] p-2 gap-2 overflow-hidden">
+      <div className="relative grid min-h-[500px] grid-cols-[1fr_210px] xl:grid-cols-[1fr_230px] p-2 gap-2 overflow-hidden">
         <div className="flex flex-col justify-between overflow-hidden pr-1 gap-2">
           <div className="flex justify-center items-center gap-2 shrink-0">
             <JarTarget
@@ -1285,7 +1331,9 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
             <div className="flex justify-center gap-2 items-center">
               {[0, 1, 2, 3].map(slotIdx => {
                 const unit = humanPlayer.field[slotIdx];
-                const isEligibleAttacker = !!(humanCanAct && phase === 'attack' && unit && getValidAttackers(humanPlayer, computerPlayer).some(attacker => attacker.instanceId === unit.instanceId));
+                const isChoosingSwordTarget = !!(pendingTargetHoldCard && BASE_CARDS[pendingTargetHoldCard.cardId]?.id === 'sword_ghost');
+                const isEligibleAttacker = !!(humanCanAct && !isChoosingSwordTarget && phase === 'attack' && unit && getValidAttackers(humanPlayer, computerPlayer).some(attacker => attacker.instanceId === unit.instanceId));
+                const isHoldTarget = !!(humanCanAct && phase === 'react' && isChoosingSwordTarget && unit && unit.currentHp > 0);
 
                 return (
                   <FieldUnitView
@@ -1294,9 +1342,14 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
                     spirit={unit}
                     isEmpty={!unit}
                     canAttack={isEligibleAttacker && !selectedAttackerId}
+                    isTargetable={isHoldTarget}
                     isSelectedForAttack={selectedAttackerId === unit?.instanceId}
                     onClick={() => {
                       if (!unit) return;
+                      if (isHoldTarget && pendingTargetHoldCard) {
+                        playTargetedReactHoldCard(pendingTargetHoldCard, unit.instanceId, 0);
+                        return;
+                      }
                       if (selectedAttackerId === unit.instanceId) {
                         setSelectedAttackerId(null);
                         return;
@@ -1315,34 +1368,20 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         </div>
 
         <div className="flex flex-col gap-3 bg-[#020617] border-l border-slate-800 p-3 rounded-xl overflow-hidden">
-          <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-[10px] uppercase font-bold text-slate-500 tracking-widest">Battle Log</span>
+          <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-3 text-xs leading-snug text-slate-300">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Battle Controls</span>
               <span className="text-[10px] font-mono text-cyan-400">Turn {turnCount}</span>
             </div>
-            <div className="flex-1 overflow-y-auto space-y-2 text-xs font-mono pr-1">
-              {log.map(entry => (
-                <div
-                  key={entry.id}
-                  className={`p-2 rounded border-l-2 leading-snug ${
-                    entry.type === 'system'
-                      ? 'bg-indigo-950/40 border-cyan-500 text-cyan-300'
-                      : entry.type === 'hold'
-                      ? 'bg-amber-950/40 border-amber-500 text-amber-300 animate-pulse font-bold'
-                      : entry.type === 'win'
-                      ? 'bg-emerald-950/50 border-emerald-400 text-emerald-200 font-bold'
-                      : entry.type === 'manifest'
-                      ? 'bg-purple-950/30 border-purple-400 text-purple-200'
-                      : entry.type === 'attack'
-                      ? 'bg-rose-950/30 border-rose-500 text-rose-200'
-                      : 'opacity-85 text-slate-300'
-                  }`}
-                >
-                  <span className="opacity-50 mr-1.5 text-[9px]">[{entry.timestamp}]</span>
-                  {entry.text}
+            <div className="space-y-1 font-mono text-[10px]">
+              <div><span className="text-cyan-300">Active:</span> {players[currentPlayer].name}</div>
+              <div><span className="text-cyan-300">Phase:</span> {reactionContext ? 'Reaction' : phase}</div>
+              <div><span className="text-cyan-300">Ready attackers:</span> {humanValidAttackers.length}</div>
+              {pendingTargetHoldCard && (
+                <div className="mt-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-2 text-amber-200">
+                  Choose a friendly field spirit as the Hold target.
                 </div>
-              ))}
-              <div ref={logEndRef} />
+              )}
             </div>
           </div>
 
@@ -1355,6 +1394,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
               onClick={() => {
                 setAutoplay(prev => !prev);
                 setSelectedAttackerId(null);
+                setPendingTargetHoldCard(null);
               }}
               className={`w-full py-2 rounded-lg border text-[10px] font-black uppercase tracking-widest transition-all ${
                 autoplay
@@ -1378,6 +1418,15 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
               </button>
             )}
 
+            {pendingTargetHoldCard && !reactionContext && (
+              <button
+                onClick={() => setPendingTargetHoldCard(null)}
+                className="w-full py-2 bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 font-black rounded-lg text-xs uppercase tracking-widest border border-amber-700"
+              >
+                Cancel Hold Target
+              </button>
+            )}
+
             {reactionContext ? (
               <div className="space-y-2">
                 <div className="text-[10px] text-amber-400 font-semibold text-center bg-amber-500/10 p-2 rounded border border-amber-500/30">
@@ -1396,6 +1445,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
                   onClick={() => {
                     sounds.playCardDraw();
                     setSelectedAttackerId(null);
+                    setPendingTargetHoldCard(null);
                     setPhase('main');
                   }}
                   disabled={phase === 'main' || !humanCanAct}
@@ -1414,6 +1464,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
                   onClick={() => {
                     sounds.playCardDraw();
                     setSelectedAttackerId(null);
+                    setPendingTargetHoldCard(null);
                     setPhase('attack');
                   }}
                   disabled={phase === 'attack' || !humanCanAct || humanValidAttackers.length === 0}
@@ -1432,6 +1483,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
                   onClick={() => {
                     sounds.playCardDraw();
                     setSelectedAttackerId(null);
+                    setPendingTargetHoldCard(null);
                     setPhase('react');
                   }}
                   disabled={phase === 'react' || !humanCanAct}
@@ -1505,14 +1557,35 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
                     canManifest={canPlayManifest}
                     isHoldReady={usableInReaction || usableInReactPhase}
                     onClick={() => {
-                      if (usableInReaction) playHoldCard(cardInst);
-                      else if (usableInReactPhase) playReactHoldCard(cardInst, 0);
-                      else if (canPlayManifest) manifestCard(cardInst);
+                      setHoveredCard(null);
+                      if (usableInReaction) {
+                        playHoldCard(cardInst);
+                      } else if (usableInReactPhase) {
+                        if (def.id === 'sword_ghost') {
+                          setPendingTargetHoldCard(cardInst);
+                          setSelectedAttackerId(null);
+                          addLog('🗡️ Choose a friendly spirit to receive +2 ATK.', 'hold');
+                        } else {
+                          playReactHoldCard(cardInst, 0);
+                        }
+                      } else if (canPlayManifest) {
+                        manifestCard(cardInst);
+                      }
                       setSelectedHandCardId(cardInst.instanceId);
                     }}
                     onHoldClick={() => {
-                      if (usableInReaction) playHoldCard(cardInst);
-                      else if (usableInReactPhase) playReactHoldCard(cardInst, 0);
+                      setHoveredCard(null);
+                      if (usableInReaction) {
+                        playHoldCard(cardInst);
+                      } else if (usableInReactPhase) {
+                        if (def.id === 'sword_ghost') {
+                          setPendingTargetHoldCard(cardInst);
+                          setSelectedAttackerId(null);
+                          addLog('🗡️ Choose a friendly spirit to receive +2 ATK.', 'hold');
+                        } else {
+                          playReactHoldCard(cardInst, 0);
+                        }
+                      }
                     }}
                     disabledReason={!canPlayManifest && !usableInReaction && !usableInReactPhase ? disabledReason : undefined}
                     className="!w-28 !h-32 lg:!w-32 lg:!h-[8.5rem] text-[9px]"
@@ -1550,6 +1623,30 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           <div className="mt-2 text-[9px] uppercase tracking-widest text-cyan-300 font-bold text-center">{humanPlayer.name}</div>
           {selectedHandCardId && <div className="text-[8px] text-slate-500 mt-1">Selected card</div>}
         </div>
+      </div>
+
+      <div className="border-t border-slate-800 bg-slate-950 p-3">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Battle Log</div>
+            <div className="text-[9px] font-mono text-slate-500">Plain text, copy/paste friendly for debugging.</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const logText = log.map(entry => `[${entry.timestamp}] ${entry.type.toUpperCase()}: ${entry.text}`).join('\n');
+              navigator.clipboard?.writeText(logText);
+            }}
+            className="rounded-lg border border-cyan-700 bg-cyan-950/60 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-cyan-300 hover:bg-cyan-900"
+          >
+            Copy Log
+          </button>
+        </div>
+        <textarea
+          readOnly
+          value={log.map(entry => `[${entry.timestamp}] ${entry.type.toUpperCase()}: ${entry.text}`).join('\n')}
+          className="h-40 w-full resize-y rounded-xl border border-slate-800 bg-slate-900/80 p-3 font-mono text-[11px] leading-relaxed text-slate-200 outline-none selection:bg-cyan-500 selection:text-slate-950"
+        />
       </div>
     </div>
   );
