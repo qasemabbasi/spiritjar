@@ -21,7 +21,8 @@ export type HoldTrigger =
   | 'when_enemy_attacks' 
   | 'before_damage' 
   | 'after_damage'
-  | 'react_phase';
+  | 'react_phase'
+  | 'when_friendly_attacks';
 
 export interface CardDefinition {
   id: string;
@@ -62,6 +63,7 @@ export interface FieldSpirit {
   summonedTurn: number;
   burn: number; // 0 if none, 1 if Burn 1
   originalOwner: number;
+  swordBuffedThisTurn?: boolean;
 }
 
 export type TurnPhase = 'start' | 'draw' | 'main' | 'attack' | 'react' | 'end';

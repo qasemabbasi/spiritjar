@@ -86,7 +86,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
   const previewCard = previewCardId ? BASE_CARDS[previewCardId] : null;
 
   return (
-    <div className="flex flex-col min-h-[768px] w-full max-w-6xl mx-auto bg-[#0f172a] text-slate-100 font-sans border-8 border-[#1e293b] rounded-2xl shadow-2xl overflow-hidden relative">
+    <div className="flex flex-col min-h-[768px] w-full max-w-5xl mx-auto bg-[#0f172a] text-slate-100 font-sans border-8 border-[#1e293b] rounded-2xl shadow-2xl overflow-hidden relative">
       <div className="absolute inset-0 bg-gradient-to-br from-indigo-950/30 via-slate-900/10 to-[#0f172a] pointer-events-none" />
 
       {/* Top Header */}
@@ -131,7 +131,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
       </div>
 
       {/* Main Selection Area */}
-      <div className="flex-1 grid grid-cols-[1fr_360px] p-6 gap-6 overflow-hidden relative z-10">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_320px] p-4 sm:p-6 gap-5 overflow-hidden relative z-10">
         {/* Collection Grid */}
         <div className="flex flex-col overflow-hidden">
           <div className="flex justify-between items-center mb-4">
@@ -150,7 +150,12 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto grid grid-cols-4 gap-4 p-2 bg-slate-950/40 rounded-xl border border-slate-800/80">
+          <div className="mb-4 rounded-2xl border border-cyan-500/30 bg-slate-950/70 p-3 shadow-[0_0_24px_rgba(34,211,238,0.12)]">
+            <div className="mb-2 text-[10px] font-black uppercase tracking-widest text-cyan-400">Full card details</div>
+            <SetupCardDetail card={previewCard} />
+          </div>
+
+          <div className="flex-1 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4 p-2 bg-slate-950/40 rounded-xl border border-slate-800/80">
             {uniqueCards.map(card => {
               const totalOwned = p1Collection.filter(id => id === card.id).length;
               const currentlyPicked = p1Selected.filter(id => id === card.id).length;
@@ -186,14 +191,6 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
 
         {/* Selected Deck Sidebar */}
         <div className="flex flex-col bg-[#020617] border border-slate-800 rounded-xl p-4 overflow-hidden">
-          <h3 className="text-xs uppercase font-bold tracking-widest text-cyan-400 mb-3 border-b border-slate-800 pb-2">
-            Card Details
-          </h3>
-
-          <div className="mb-4 shrink-0">
-            <SetupCardDetail card={previewCard} />
-          </div>
-
           <h3 className="text-xs uppercase font-bold tracking-widest text-cyan-400 mb-3 border-b border-slate-800 pb-2">
             Your Jar Selection ({p1Selected.length}/10)
           </h3>

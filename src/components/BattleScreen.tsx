@@ -50,7 +50,8 @@ function makeSpirit(instance: CardInstance, turnCount: number, currentPlayer: 0 
     canAttackThisTurn: def.keywords.includes('rush'),
     summonedTurn: turnCount,
     burn: 0,
-    originalOwner: instance.originalOwner ?? currentPlayer
+    originalOwner: instance.originalOwner ?? currentPlayer,
+    swordBuffedThisTurn: false
   };
 }
 
@@ -206,6 +207,10 @@ function isHoldCardLegallyUsable(card: CardInstance, ctx: ReactionContext, playe
     return ctx.trigger === 'when_targeted' && !!attacker;
   }
 
+  if (def.id === 'sword_ghost') {
+    return ctx.trigger === 'when_friendly_attacks' && !!attacker && !attacker.keywords.includes('cat') && !attacker.swordBuffedThisTurn;
+  }
+
   return true;
 }
 
@@ -231,6 +236,21 @@ function getAiReactionHoldScore(card: CardInstance, ctx: ReactionContext, player
     if (attacker.keywords.includes('token')) return -20;
     if (attacker.currentHp >= 3 || attacker.atk >= 3 || attackerDef.cost >= 3) return 70;
     return 10;
+  }
+
+  if (def.id === 'sword_ghost') {
+    if (!attacker || attacker.keywords.includes('cat') || attacker.swordBuffedThisTurn) return -999;
+    const target = ctx.targetSpiritInstanceId
+      ? players[ctx.sourcePlayerIndex === 0 ? 1 : 0]?.field.find(unit => unit.instanceId === ctx.targetSpiritInstanceId)
+      : undefined;
+    if (target) {
+      const currentDamage = Math.max(0, attacker.atk - target.def);
+      const boostedDamage = Math.max(0, attacker.atk + 2 - target.def);
+      if (currentDamage < target.currentHp && boostedDamage >= target.currentHp) return 80;
+      return -20;
+    }
+    if ((ctx.incomingDamage || attacker.atk) + 2 >= players[ctx.sourcePlayerIndex === 0 ? 1 : 0].jarHp) return 85;
+    return -20;
   }
 
   if (def.id === 'soldier_ghost') {
@@ -679,7 +699,9 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       // Existing non-token units ready up after start effects. New/revived units stay exhausted.
       active.field = active.field.map(unit => ({
         ...unit,
-        canAttackThisTurn: unit.summonedTurn < turnCount && unit.atk > 0 && unit.cardId !== 'bone_pile_token'
+        atk: BASE_CARDS[unit.cardId]?.atk ?? unit.atk,
+        swordBuffedThisTurn: false,
+        canAttackThisTurn: unit.summonedTurn < turnCount && (BASE_CARDS[unit.cardId]?.atk ?? unit.atk) > 0 && unit.cardId !== 'bone_pile_token'
       }));
 
       return copy;
@@ -791,10 +813,10 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       player.hasManifestedThisTurn = true;
 
       if (def.id === 'bomb_ghost') {
-        addLog('💣 Bomb Ghost explodes! All non-Cat spirits are cleared from both fields.', 'effect');
+        addLog('💣 Bomb Ghost explodes for 4 damage to every spirit on both fields! This ignores DEF and can hit Cats.', 'effect');
         sounds.playBurn();
         copy.forEach(boardPlayer => {
-          boardPlayer.field = boardPlayer.field.filter(unit => unit.keywords.includes('cat'));
+          boardPlayer.field = boardPlayer.field.map(unit => ({ ...unit, currentHp: unit.currentHp - 4 }));
         });
         setDiscardPile(dp => [...dp, instance]);
         return copy;
@@ -905,6 +927,41 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
 
     if (!hasReaction) performUnitAttack(attacker, targetUnit, currentPlayer);
   }, [addLog, currentPlayer, performJarAttack, performUnitAttack, phase, players, reactionContext, selectedAttackerId, triggerHoldReactionWindow, winner]);
+
+
+  const playSwordAttackHold = useCallback((cardInst: CardInstance, playerIdx: 0 | 1, attackerId: string) => {
+    setHoveredCard(null);
+    setPendingTargetHoldCard(null);
+    const def = BASE_CARDS[cardInst.cardId];
+    const player = players[playerIdx];
+
+    if (def.id !== 'sword_ghost') return false;
+
+    const attacker = player.field.find(unit => unit.instanceId === attackerId && unit.currentHp > 0);
+    if (!attacker || attacker.keywords.includes('cat') || attacker.swordBuffedThisTurn) {
+      addLog('⚠️ Sword Ghost can only empower a selected non-Cat attacker once per turn.', 'system');
+      return false;
+    }
+
+    sounds.playManifest();
+    addLog(`⚡ HOLD PLAYED: ${player.name} uses Sword Ghost to empower ${BASE_CARDS[attacker.cardId].name}!`, 'hold');
+    addLog(`🗡️ ${BASE_CARDS[attacker.cardId].name} gets +2 ATK this turn.`, 'effect');
+
+    setPlayers(prev => {
+      const copy = clonePlayers(prev);
+      const active = copy[playerIdx];
+      active.hand = active.hand.filter(card => card.instanceId !== cardInst.instanceId);
+      active.field = active.field.map(unit => {
+        if (unit.instanceId !== attackerId) return unit;
+        return { ...unit, atk: unit.atk + 2, swordBuffedThisTurn: true };
+      });
+      return copy;
+    });
+
+    setDiscardPile(dp => [...dp, cardInst]);
+    setSelectedHandCardId(null);
+    return true;
+  }, [addLog, players]);
 
   const playReactHoldCard = useCallback((cardInst: CardInstance, playerIdx: 0 | 1) => {
     setHoveredCard(null);
@@ -1190,6 +1247,20 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         const attacker = validAttackers[0];
         const target = getBestAiTarget(attacker, enemy);
 
+        const swordHold = active.hand.find(card => BASE_CARDS[card.cardId]?.id === 'sword_ghost');
+        const shouldUseSwordHold = !!(
+          swordHold &&
+          !attacker.keywords.includes('cat') &&
+          !attacker.swordBuffedThisTurn &&
+          ((target && Math.max(0, attacker.atk - target.def) < target.currentHp && Math.max(0, attacker.atk + 2 - target.def) >= target.currentHp) ||
+            (!target && enemy.field.length === 0 && attacker.atk + 2 >= enemy.jarHp))
+        );
+
+        if (swordHold && shouldUseSwordHold) {
+          playSwordAttackHold(swordHold, currentPlayer, attacker.instanceId);
+          return;
+        }
+
         if (target) {
           const hasReaction = triggerHoldReactionWindow({
             trigger: 'when_enemy_attacks',
@@ -1235,7 +1306,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     }, 550);
 
     return () => clearTimeout(timer);
-  }, [autoplay, currentPlayer, handleEndTurn, lastDestroyedGhosts, manifestCard, performJarAttack, performUnitAttack, phase, players, reactionContext, triggerHoldReactionWindow, winner]);
+  }, [autoplay, currentPlayer, handleEndTurn, lastDestroyedGhosts, manifestCard, performJarAttack, performUnitAttack, phase, playSwordAttackHold, players, reactionContext, triggerHoldReactionWindow, winner]);
 
   useEffect(() => {
     if (!reactionContext) return;
@@ -1274,9 +1345,17 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     const def = BASE_CARDS[card.cardId];
     if (!def || !def.hasHold || def.holdTrigger !== 'react_phase') return false;
     if (!humanCanAct || phase !== 'react' || reactionContext) return false;
-    if (def.id === 'sword_ghost') return humanPlayer.field.some(unit => unit.currentHp > 0 && !unit.keywords.includes('cat'));
+    if (def.id === 'sword_ghost') return false;
     if (def.id === 'ritual_ghost') return !!lastDestroyedGhosts[0] && humanPlayer.field.length < FIELD_LIMIT;
     return true;
+  };
+
+  const isCardUsableAttackTrick = (card: CardInstance) => {
+    const def = BASE_CARDS[card.cardId];
+    if (!def || def.id !== 'sword_ghost') return false;
+    if (!humanCanAct || phase !== 'attack' || reactionContext || !selectedAttackerId) return false;
+    const attacker = humanPlayer.field.find(unit => unit.instanceId === selectedAttackerId);
+    return !!attacker && attacker.currentHp > 0 && !attacker.keywords.includes('cat') && !attacker.swordBuffedThisTurn;
   };
 
   const unitCardClass = '!w-28 !h-40 lg:!w-32 lg:!h-44';
@@ -1597,6 +1676,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
               const isReactionWindow = !!reactionContext && reactionContext.targetPlayerIndex === 0;
               const usableInReaction = isCardUsableReaction(cardInst);
               const usableInReactPhase = isCardUsableReactPhase(cardInst);
+              const usableInAttackTrick = isCardUsableAttackTrick(cardInst);
               const canPlayManifest = !!(
                 humanCanAct &&
                 phase === 'main' &&
@@ -1605,7 +1685,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
               );
 
               let disabledReason: string | undefined;
-              if (phase !== 'main' && !isReactionWindow) disabledReason = 'Can only Manifest during Main phase';
+              if (phase !== 'main' && !isReactionWindow && !usableInAttackTrick) disabledReason = 'Can only Manifest during Main phase';
               else if (def.id === 'ritual_ghost' && humanPlayer.field.filter(unit => unit.currentHp > 0).length < 2) disabledReason = 'Needs 2 friendly sacrifices';
               else if (humanPlayer.field.length >= FIELD_LIMIT && def.id !== 'bomb_ghost' && def.id !== 'ritual_ghost') disabledReason = `Field full (${FIELD_LIMIT}/${FIELD_LIMIT} slots)`;
               else if (humanPlayer.currentPsy < def.cost) disabledReason = `Need ${def.cost} Psy (${humanPlayer.currentPsy}/${def.cost})`;
@@ -1623,19 +1703,15 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
                   <CardView
                     card={def}
                     canManifest={canPlayManifest}
-                    isHoldReady={usableInReaction || usableInReactPhase}
+                    isHoldReady={usableInReaction || usableInReactPhase || usableInAttackTrick}
                     onClick={() => {
                       setHoveredCard(null);
                       if (usableInReaction) {
                         playHoldCard(cardInst);
+                      } else if (usableInAttackTrick && selectedAttackerId) {
+                        playSwordAttackHold(cardInst, 0, selectedAttackerId);
                       } else if (usableInReactPhase) {
-                        if (def.id === 'sword_ghost') {
-                          setPendingTargetHoldCard(cardInst);
-                          setSelectedAttackerId(null);
-                          addLog('🗡️ Choose a friendly spirit to receive +2 ATK.', 'hold');
-                        } else {
-                          playReactHoldCard(cardInst, 0);
-                        }
+                        playReactHoldCard(cardInst, 0);
                       } else if (canPlayManifest) {
                         manifestCard(cardInst);
                       }
@@ -1645,17 +1721,13 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
                       setHoveredCard(null);
                       if (usableInReaction) {
                         playHoldCard(cardInst);
+                      } else if (usableInAttackTrick && selectedAttackerId) {
+                        playSwordAttackHold(cardInst, 0, selectedAttackerId);
                       } else if (usableInReactPhase) {
-                        if (def.id === 'sword_ghost') {
-                          setPendingTargetHoldCard(cardInst);
-                          setSelectedAttackerId(null);
-                          addLog('🗡️ Choose a friendly spirit to receive +2 ATK.', 'hold');
-                        } else {
-                          playReactHoldCard(cardInst, 0);
-                        }
+                        playReactHoldCard(cardInst, 0);
                       }
                     }}
-                    disabledReason={!canPlayManifest && !usableInReaction && !usableInReactPhase ? disabledReason : undefined}
+                    disabledReason={!canPlayManifest && !usableInReaction && !usableInReactPhase && !usableInAttackTrick ? disabledReason : undefined}
                     className="!w-28 !h-32 lg:!w-32 lg:!h-[8.5rem] text-[9px]"
                     compact
                   />
