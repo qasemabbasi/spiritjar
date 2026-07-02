@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { BASE_CARDS, getStandardPlayerCollection, getDefaultSelectedDeck } from '../data/cards';
+import { CardDefinition } from '../types';
 import { CardView } from './CardView';
 import { sounds } from '../utils/audio';
 
@@ -7,9 +8,52 @@ interface SetupScreenProps {
   onComplete: (p1Selected: string[], p2Selected: string[], p2IsBot: boolean) => void;
 }
 
+function SetupCardDetail({ card }: { card: CardDefinition | null }) {
+  if (!card) {
+    return (
+      <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 text-xs leading-relaxed text-slate-500 font-mono">
+        Hover or focus a card to read its full rules before adding it to your Jar.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-cyan-500/50 bg-slate-950/90 p-4 shadow-[0_0_24px_rgba(34,211,238,0.18)]">
+      <div className="mb-2 flex items-start justify-between gap-3 border-b border-slate-800 pb-2">
+        <div>
+          <div className="text-lg font-black uppercase tracking-tight text-cyan-300">{card.name}</div>
+          <div className="mt-1 text-[10px] font-mono uppercase tracking-widest text-slate-500">
+            {card.keywords.length > 0 ? card.keywords.join(' • ') : 'No keyword'}
+          </div>
+        </div>
+        <div className="rounded-full bg-cyan-500 px-3 py-1 text-sm font-black text-slate-950">{card.cost} Psy</div>
+      </div>
+
+      <div className="mb-3 grid grid-cols-3 rounded-xl border border-indigo-800/70 bg-indigo-950/70 py-2 text-center font-mono text-sm">
+        <div><span className="font-black text-emerald-400">{card.hp}</span><span className="ml-1 text-slate-500">HP</span></div>
+        <div><span className="font-black text-orange-400">{card.atk}</span><span className="ml-1 text-slate-500">ATK</span></div>
+        <div><span className="font-black text-blue-400">{card.def}</span><span className="ml-1 text-slate-500">DEF</span></div>
+      </div>
+
+      <div className="space-y-2 text-xs leading-snug text-slate-200">
+        {card.role && <div><span className="font-black text-violet-300">ROLE:</span> {card.role}</div>}
+        {card.manifestText && <div><span className="font-black text-cyan-400">MANIFEST:</span> {card.manifestText}</div>}
+        {card.fieldText && <div><span className="font-black text-indigo-300">FIELD:</span> {card.fieldText}</div>}
+        {card.attackText && <div><span className="font-black text-rose-400">ATTACK:</span> {card.attackText}</div>}
+        {card.defeatText && <div><span className="font-black text-slate-400">DEFEAT:</span> {card.defeatText}</div>}
+        {card.hasHold && <div><span className="font-black text-amber-400">HOLD:</span> {card.holdText}</div>}
+        {!card.manifestText && !card.fieldText && !card.attackText && !card.defeatText && !card.hasHold && !card.role && (
+          <div className="text-slate-400">No special rules.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function SetupScreen({ onComplete }: SetupScreenProps) {
   const [p1Collection] = useState<string[]>(() => getStandardPlayerCollection());
   const [p1Selected, setP1Selected] = useState<string[]>(() => getDefaultSelectedDeck());
+  const [previewCardId, setPreviewCardId] = useState<string | null>(getDefaultSelectedDeck()[0] ?? null);
 
   const addCard = (cardId: string) => {
     sounds.playCardDraw();
@@ -39,6 +83,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
   };
 
   const uniqueCards = Object.values(BASE_CARDS).filter(c => !c.token);
+  const previewCard = previewCardId ? BASE_CARDS[previewCardId] : null;
 
   return (
     <div className="flex flex-col min-h-[768px] w-full max-w-6xl mx-auto bg-[#0f172a] text-slate-100 font-sans border-8 border-[#1e293b] rounded-2xl shadow-2xl overflow-hidden relative">
@@ -86,7 +131,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
       </div>
 
       {/* Main Selection Area */}
-      <div className="flex-1 grid grid-cols-[1fr_300px] p-6 gap-6 overflow-hidden relative z-10">
+      <div className="flex-1 grid grid-cols-[1fr_360px] p-6 gap-6 overflow-hidden relative z-10">
         {/* Collection Grid */}
         <div className="flex flex-col overflow-hidden">
           <div className="flex justify-between items-center mb-4">
@@ -112,7 +157,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
               const canPickMore = currentlyPicked < totalOwned && p1Selected.length < 10;
 
               return (
-                <div key={card.id} className="relative group flex flex-col items-center">
+                <div key={card.id} className="relative group flex flex-col items-center" onMouseEnter={() => setPreviewCardId(card.id)} onFocus={() => setPreviewCardId(card.id)}>
                   <CardView
                     card={card}
                     compact
@@ -142,10 +187,18 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
         {/* Selected Deck Sidebar */}
         <div className="flex flex-col bg-[#020617] border border-slate-800 rounded-xl p-4 overflow-hidden">
           <h3 className="text-xs uppercase font-bold tracking-widest text-cyan-400 mb-3 border-b border-slate-800 pb-2">
+            Card Details
+          </h3>
+
+          <div className="mb-4 shrink-0">
+            <SetupCardDetail card={previewCard} />
+          </div>
+
+          <h3 className="text-xs uppercase font-bold tracking-widest text-cyan-400 mb-3 border-b border-slate-800 pb-2">
             Your Jar Selection ({p1Selected.length}/10)
           </h3>
 
-          <div className="flex-1 overflow-y-auto space-y-2 pr-1 font-mono text-xs">
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1 font-mono text-xs">
             {p1Selected.length === 0 ? (
               <div className="text-slate-600 text-center py-12 text-xs italic">
                 Click cards on the left to add them to your secret selection.

@@ -17,15 +17,17 @@ Spirit Jar is currently a single-player prototype: **Player 1 vs Spirit Lord AI*
 - Each spirit may attack once per turn.
 - Newly Manifested spirits cannot attack until the next turn unless a card says otherwise.
 - Enemy spirits must be cleared before attacking the Enemy Jar.
-- Cat Ghost can attack spirits but cannot attack the Jar.
+- Cat Ghost can attack the Jar. It cannot be targeted by non-Cat normal attacks, but Splash, Burn, Bomb, and board-wide effects can damage it. Cat cannot receive ATK buffs.
 - Bone Pile revives into Bones Ghost at the start of its owner's turn if it survives.
+- Attack damage is `ATK - DEF`, minimum 0. If DEF fully blocks the attack, no damage is dealt. Burn, Splash, Bomb, and board effects ignore DEF.
 - Burn ticks at the start of the burned unit owner's turn, deals its current value, then decays by 1.
 - Flame Ghost now applies Burn 2, stacking up to Burn 4.
-- Bomb Ghost is a 5-cost board clear that destroys all non-Cat spirits. As a Hold, it can destroy one attacking non-Cat spirit.
-- Sword Ghost is a fragile high-attack answer to Fat Ghost. As a React Hold, it gives your strongest friendly spirit +2 ATK.
+- Bomb Ghost is a 5-cost board blast that deals 4 damage to all spirits, including Cats. As a Hold, it deals 4 damage to one attacking non-Cat spirit.
+- Sword Ghost is a fragile high-attack answer to Fat Ghost. As a React Hold, it gives a non-Cat friendly spirit +2 ATK.
 - Ritual Ghost requires sacrificing two friendly spirits to Manifest. As a React Hold, it resummons your last destroyed non-token ghost if you have field space.
 - Old Ghost gives +1 bonus Psy next turn when destroyed.
 - Autoplay can let the AI pilot both sides for balance testing.
+- The setup screen includes a full card detail panel so deck choices are readable before starting.
 
 ## Run Locally
 

@@ -69,7 +69,8 @@ function hasValidUnitTarget(attacker: FieldSpirit, enemy: PlayerState, target?: 
   const enemyTaunts = enemy.field.filter(unit => unit.keywords.includes('taunt'));
   if (enemyTaunts.length > 0 && !target.keywords.includes('taunt')) return false;
 
-  // Cat Ghost can only be attacked/damaged by Cat Ghosts.
+  // Cat Ghost cannot be targeted by non-Cat normal attacks.
+  // Board-wide, Splash, Burn, and Bomb damage can still hit Cat.
   if (target.keywords.includes('cat') && !attacker.keywords.includes('cat')) return false;
 
   return true;
@@ -80,8 +81,8 @@ function hasValidAttackTarget(attacker: FieldSpirit, enemy: PlayerState): boolea
   if (validUnitTarget) return true;
 
   if (enemy.field.length > 0) return false;
-  if (attacker.keywords.includes('cat')) return false;
 
+  // Cats can now chip the Jar if they slip through.
   return true;
 }
 
@@ -97,8 +98,8 @@ function getBestAiTarget(attacker: FieldSpirit, enemy: PlayerState): FieldSpirit
   const pool = taunts.length > 0 ? taunts : validTargets;
 
   return [...pool].sort((a, b) => {
-    const aLethal = Math.max(1, attacker.atk - a.def) >= a.currentHp ? 1 : 0;
-    const bLethal = Math.max(1, attacker.atk - b.def) >= b.currentHp ? 1 : 0;
+    const aLethal = Math.max(0, attacker.atk - a.def) >= a.currentHp ? 1 : 0;
+    const bLethal = Math.max(0, attacker.atk - b.def) >= b.currentHp ? 1 : 0;
     if (bLethal !== aLethal) return bLethal - aLethal;
     return BASE_CARDS[b.cardId].cost - BASE_CARDS[a.cardId].cost;
   })[0];
@@ -163,6 +164,91 @@ function healMostDamagedFriendly(player: PlayerState, amount: number): string | 
   return BASE_CARDS[damaged.cardId].name;
 }
 
+
+
+function getReactionAttacker(ctx: ReactionContext, players: PlayerState[]): FieldSpirit | undefined {
+  return players[ctx.sourcePlayerIndex]?.field.find(unit => unit.instanceId === ctx.sourceSpiritInstanceId);
+}
+
+function isHoldCardLegallyUsable(card: CardInstance, ctx: ReactionContext, players: PlayerState[]): boolean {
+  const def = BASE_CARDS[card.cardId];
+  if (!def?.hasHold || def.holdTrigger !== ctx.trigger) return false;
+
+  const reactingPlayer = players[ctx.targetPlayerIndex];
+  const sourcePlayer = players[ctx.sourcePlayerIndex];
+  const attacker = getReactionAttacker(ctx, players);
+
+  if (def.id === 'bomb_ghost') {
+    return ctx.trigger === 'when_enemy_attacks' && !!attacker && !attacker.keywords.includes('cat');
+  }
+
+  if (def.id === 'flame_ghost') {
+    return ctx.trigger === 'when_enemy_attacks' && !!attacker && attacker.burn < MAX_BURN;
+  }
+
+  if (def.id === 'soldier_ghost') {
+    return ctx.trigger === 'when_jar_damaged' && reactingPlayer.field.length < FIELD_LIMIT;
+  }
+
+  if (def.id === 'old_ghost') {
+    return ctx.trigger === 'when_jar_damaged';
+  }
+
+  if (def.id === 'loud_ghost') {
+    return ctx.trigger === 'when_enemy_summons_token' && sourcePlayer.field.some(unit => unit.keywords.includes('token'));
+  }
+
+  if (def.id === 'bones_ghost') {
+    return ctx.trigger === 'when_spirit_defeated' && reactingPlayer.field.length < FIELD_LIMIT;
+  }
+
+  if (def.id === 'cat_ghost') {
+    return ctx.trigger === 'when_targeted' && !!attacker;
+  }
+
+  return true;
+}
+
+function getAiReactionHoldScore(card: CardInstance, ctx: ReactionContext, players: PlayerState[]): number {
+  if (!isHoldCardLegallyUsable(card, ctx, players)) return -999;
+
+  const def = BASE_CARDS[card.cardId];
+  const attacker = getReactionAttacker(ctx, players);
+  const reactingPlayer = players[ctx.targetPlayerIndex];
+
+  if (def.id === 'bomb_ghost') {
+    if (!attacker) return -999;
+    const attackerDef = BASE_CARDS[attacker.cardId];
+    // Do not waste premium Bomb Hold on Wisps/small chip attackers unless the Jar would die.
+    if (ctx.incomingDamage && ctx.incomingDamage >= reactingPlayer.jarHp) return 100;
+    if (attackerDef.cost >= 3 || attacker.atk >= 3) return 90;
+    return -25;
+  }
+
+  if (def.id === 'flame_ghost') {
+    if (!attacker) return -999;
+    const attackerDef = BASE_CARDS[attacker.cardId];
+    if (attacker.keywords.includes('token')) return -20;
+    if (attacker.currentHp >= 3 || attacker.atk >= 3 || attackerDef.cost >= 3) return 70;
+    return 10;
+  }
+
+  if (def.id === 'soldier_ghost') {
+    if ((ctx.incomingDamage || 0) >= reactingPlayer.jarHp) return 95;
+    return 45;
+  }
+
+  if (def.id === 'old_ghost') {
+    if ((ctx.incomingDamage || 0) >= reactingPlayer.jarHp) return 80;
+    if (reactingPlayer.jarHp <= STARTING_JAR_HP - 3) return 35;
+    return -10;
+  }
+
+  if (def.id === 'loud_ghost') return 35;
+  if (def.id === 'bones_ghost') return 25;
+
+  return 0;
+}
 
 function CardDetailPreview({ card }: { card: CardDefinition | null }) {
   if (!card) return null;
@@ -321,9 +407,10 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       const copy = clonePlayers(prev);
       copy[targetPlayerIdx].field = copy[targetPlayerIdx].field.map(unit => {
         if (unit.instanceId !== targetId) return unit;
-        if (unit.keywords.includes('cat') && !allowCatDamage) return unit;
         const updated = { ...unit, currentHp: unit.currentHp - damage };
-        if (sourceCardId === 'flame_ghost' && damage > 0) updated.burn = Math.min(MAX_BURN, updated.burn + FLAME_BURN_AMOUNT);
+        if (sourceCardId === 'flame_ghost' && damage > 0 && updated.currentHp > 0) {
+          updated.burn = Math.min(MAX_BURN, updated.burn + FLAME_BURN_AMOUNT);
+        }
         return updated;
       });
       return copy;
@@ -396,25 +483,30 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     const atkCard = BASE_CARDS[attacker.cardId];
 
     if (defender.keywords.includes('cat') && !attacker.keywords.includes('cat')) {
-      addLog('🛡️ Cat Ghost can only be attacked by another Cat Ghost! 0 damage dealt.', 'effect');
+      addLog('🛡️ Cat Ghost cannot be targeted by non-Cat normal attacks.', 'effect');
       return;
     }
 
-    const damage = Math.max(1, attacker.atk - defender.def);
+    const damage = Math.max(0, attacker.atk - defender.def);
     sounds.playAttack();
-    addLog(`⚔️ ${atkCard.name} attacks ${defCard.name} for ${damage} damage.`, 'attack');
 
-    applyDamageToSpirit(defenderPlayerIdx, defender.instanceId, damage, attacker.cardId, attacker.keywords.includes('cat'));
+    if (damage <= 0) {
+      addLog(`🛡️ ${defCard.name}'s DEF blocks ${atkCard.name}'s attack.`, 'attack');
+    } else {
+      addLog(`⚔️ ${atkCard.name} attacks ${defCard.name} for ${damage} damage.`, 'attack');
+      const targetSurvives = defender.currentHp - damage > 0;
+      applyDamageToSpirit(defenderPlayerIdx, defender.instanceId, damage, targetSurvives ? attacker.cardId : undefined, true);
 
-    if (attacker.cardId === 'flame_ghost') {
-      addLog(`🔥 Flame Ghost applied Burn ${FLAME_BURN_AMOUNT} to ${defCard.name}!`, 'effect');
+      if (attacker.cardId === 'flame_ghost' && targetSurvives) {
+        addLog(`🔥 Flame Ghost applied Burn ${FLAME_BURN_AMOUNT} to ${defCard.name}!`, 'effect');
+      }
     }
 
     if (attacker.keywords.includes('splash')) {
-      addLog('💥 Splash 1! Other enemy spirits take 1 damage.', 'effect');
+      addLog('💥 Splash 1! Other enemy spirits take 1 damage. Splash ignores DEF and can hit Cats.', 'effect');
       players[defenderPlayerIdx].field.forEach(unit => {
         if (unit.instanceId === defender.instanceId) return;
-        applyDamageToSpirit(defenderPlayerIdx, unit.instanceId, 1, undefined, attacker.keywords.includes('cat'));
+        applyDamageToSpirit(defenderPlayerIdx, unit.instanceId, 1, undefined, true);
       });
     }
   }, [addLog, applyDamageToSpirit, players]);
@@ -441,10 +533,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
 
   const triggerHoldReactionWindow = useCallback((ctx: ReactionContext) => {
     const targetPlayer = players[ctx.targetPlayerIndex];
-    const usableHolds = targetPlayer.hand.filter(card => {
-      const def = BASE_CARDS[card.cardId];
-      return def && def.hasHold && def.holdTrigger === ctx.trigger;
-    });
+    const usableHolds = targetPlayer.hand.filter(card => isHoldCardLegallyUsable(card, ctx, players));
 
     if (usableHolds.length === 0) return false;
 
@@ -729,10 +818,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       if (def.id === 'loud_ghost') {
         const enemyIdx = currentPlayer === 0 ? 1 : 0;
         addLog('📢 Loud Ghost deals 1 damage to all enemy spirits!', 'effect');
-        copy[enemyIdx].field = copy[enemyIdx].field.map(unit => {
-          if (unit.keywords.includes('cat')) return unit;
-          return { ...unit, currentHp: unit.currentHp - 1 };
-        });
+        copy[enemyIdx].field = copy[enemyIdx].field.map(unit => ({ ...unit, currentHp: unit.currentHp - 1 }));
       }
 
       if (def.id === 'lantern_ghost' && player.field.length < FIELD_LIMIT) {
@@ -791,12 +877,6 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         addLog('⚠️ Cannot attack enemy Jar while opponent controls spirits!', 'system');
         return;
       }
-      if (attacker.keywords.includes('cat')) {
-        addLog('⚠️ Cat Ghosts cannot attack the Jar!', 'system');
-        setSelectedAttackerId(null);
-        return;
-      }
-
       const hasReaction = triggerHoldReactionWindow({
         trigger: 'when_jar_damaged',
         sourcePlayerIndex: currentPlayer,
@@ -844,9 +924,9 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
 
       if (def.id === 'sword_ghost') {
         const target = [...active.field]
-          .filter(unit => unit.currentHp > 0 && !unit.keywords.includes('token'))
+          .filter(unit => unit.currentHp > 0 && !unit.keywords.includes('token') && !unit.keywords.includes('cat'))
           .sort((a, b) => b.atk - a.atk || b.currentHp - a.currentHp)[0]
-          ?? [...active.field].filter(unit => unit.currentHp > 0).sort((a, b) => b.atk - a.atk)[0];
+          ?? [...active.field].filter(unit => unit.currentHp > 0 && !unit.keywords.includes('cat')).sort((a, b) => b.atk - a.atk)[0];
 
         if (target) {
           active.field = active.field.map(unit => {
@@ -902,7 +982,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     setPlayers(prev => {
       const copy = clonePlayers(prev);
       const active = copy[playerIdx];
-      const target = active.field.find(unit => unit.instanceId === targetId && unit.currentHp > 0);
+      const target = active.field.find(unit => unit.instanceId === targetId && unit.currentHp > 0 && !unit.keywords.includes('cat'));
 
       active.hand = active.hand.filter(card => card.instanceId !== cardInst.instanceId);
 
@@ -957,6 +1037,11 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     const reactingPlayer = players[reactingPlayerIdx];
     const def = BASE_CARDS[cardInst.cardId];
 
+    if (!isHoldCardLegallyUsable(cardInst, reactionContext, players)) {
+      addLog(`⚠️ ${def.name} has no legal Hold target right now. It stays in hand.`, 'system');
+      return;
+    }
+
     sounds.playManifest();
     addLog(`⚡ REACTION PLAYED: ${reactingPlayer.name} uses ${def.name} Hold effect!`, 'hold');
 
@@ -971,23 +1056,17 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     const attacker = players[sourcePlayerIdx].field.find(unit => unit.instanceId === reactionContext.sourceSpiritInstanceId);
 
     if (def.id === 'bomb_ghost') {
-      if (attacker && !attacker.keywords.includes('cat')) {
-        addLog(`💣 Bomb Ghost destroys the attacking ${BASE_CARDS[attacker.cardId].name}!`, 'effect');
+      if (attacker) {
+        addLog(`💣 Bomb Ghost blasts the attacking ${BASE_CARDS[attacker.cardId].name} for 4 damage!`, 'effect');
         setPlayers(prev => {
           const copy = clonePlayers(prev);
           copy[sourcePlayerIdx].field = copy[sourcePlayerIdx].field.map(unit => {
             if (unit.instanceId !== attacker.instanceId) return unit;
-            return { ...unit, currentHp: 0 };
+            return { ...unit, currentHp: unit.currentHp - 4 };
           });
           return copy;
         });
         exhaustAttacker(sourcePlayerIdx, attacker.instanceId);
-      } else {
-        addLog('🐾 Bomb Ghost cannot destroy a Cat Ghost attacker.', 'effect');
-        if (attacker && reactionContext.targetSpiritInstanceId) {
-          const target = players[reactingPlayerIdx].field.find(unit => unit.instanceId === reactionContext.targetSpiritInstanceId);
-          if (target) performUnitAttack(attacker, target, sourcePlayerIdx);
-        }
       }
     } else if (def.id === 'soldier_ghost') {
       addLog('🛡️ Soldier Ghost manifests to intercept the incoming attack!', 'effect');
@@ -1123,7 +1202,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           return;
         }
 
-        if (enemy.field.length === 0 && !attacker.keywords.includes('cat')) {
+        if (enemy.field.length === 0) {
           const hasReaction = triggerHoldReactionWindow({
             trigger: 'when_jar_damaged',
             sourcePlayerIndex: currentPlayer,
@@ -1140,19 +1219,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       }
 
       if (phase === 'react') {
-        const reactHold = active.hand.find(card => {
-          const def = BASE_CARDS[card.cardId];
-          if (!def?.hasHold || def.holdTrigger !== 'react_phase') return false;
-          if (def.id === 'sword_ghost') return active.field.some(unit => unit.currentHp > 0);
-          if (def.id === 'ritual_ghost') return !!lastDestroyedGhosts[currentPlayer] && active.field.length < FIELD_LIMIT;
-          return true;
-        });
-
-        if (reactHold) {
-          playReactHoldCard(reactHold, currentPlayer);
-          return;
-        }
-
+        // The AI should not randomly spend proactive React-phase Holds at end of turn.
+        // It only uses Holds in response to concrete attack/jar windows.
         handleEndTurn();
         return;
       }
@@ -1167,7 +1235,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     }, 550);
 
     return () => clearTimeout(timer);
-  }, [autoplay, currentPlayer, handleEndTurn, lastDestroyedGhosts, manifestCard, performJarAttack, performUnitAttack, phase, players, playReactHoldCard, reactionContext, triggerHoldReactionWindow, winner]);
+  }, [autoplay, currentPlayer, handleEndTurn, lastDestroyedGhosts, manifestCard, performJarAttack, performUnitAttack, phase, players, reactionContext, triggerHoldReactionWindow, winner]);
 
   useEffect(() => {
     if (!reactionContext) return;
@@ -1175,12 +1243,13 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     if (!reactingPlayer.isBot && !autoplay) return;
 
     const timer = setTimeout(() => {
-      const usableHolds = reactingPlayer.hand.filter(card => {
-        const def = BASE_CARDS[card.cardId];
-        return def && def.hasHold && def.holdTrigger === reactionContext.trigger;
-      });
+      const usableHolds = reactingPlayer.hand
+        .filter(card => isHoldCardLegallyUsable(card, reactionContext, players))
+        .map(card => ({ card, score: getAiReactionHoldScore(card, reactionContext, players) }))
+        .filter(entry => entry.score > 0)
+        .sort((a, b) => b.score - a.score);
 
-      if (usableHolds.length > 0) playHoldCard(usableHolds[0]);
+      if (usableHolds.length > 0) playHoldCard(usableHolds[0].card);
       else passReaction();
     }, 700);
 
@@ -1192,21 +1261,20 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
   const isHumanTurn = currentPlayer === 0;
   const humanCanAct = isHumanTurn && !winner && !autoplay;
   const selectedAttacker = humanPlayer.field.find(unit => unit.instanceId === selectedAttackerId);
-  const canAttackEnemyJar = !!selectedAttacker && computerPlayer.field.length === 0 && !selectedAttacker.keywords.includes('cat');
+  const canAttackEnemyJar = !!selectedAttacker && computerPlayer.field.length === 0;
   const humanValidAttackers = getValidAttackers(humanPlayer, computerPlayer);
 
   const isCardUsableReaction = (card: CardInstance) => {
     if (!reactionContext) return false;
     if (reactionContext.targetPlayerIndex !== 0) return false;
-    const def = BASE_CARDS[card.cardId];
-    return def && def.hasHold && def.holdTrigger === reactionContext.trigger;
+    return isHoldCardLegallyUsable(card, reactionContext, players);
   };
 
   const isCardUsableReactPhase = (card: CardInstance) => {
     const def = BASE_CARDS[card.cardId];
     if (!def || !def.hasHold || def.holdTrigger !== 'react_phase') return false;
     if (!humanCanAct || phase !== 'react' || reactionContext) return false;
-    if (def.id === 'sword_ghost') return humanPlayer.field.some(unit => unit.currentHp > 0);
+    if (def.id === 'sword_ghost') return humanPlayer.field.some(unit => unit.currentHp > 0 && !unit.keywords.includes('cat'));
     if (def.id === 'ritual_ghost') return !!lastDestroyedGhosts[0] && humanPlayer.field.length < FIELD_LIMIT;
     return true;
   };
@@ -1333,7 +1401,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
                 const unit = humanPlayer.field[slotIdx];
                 const isChoosingSwordTarget = !!(pendingTargetHoldCard && BASE_CARDS[pendingTargetHoldCard.cardId]?.id === 'sword_ghost');
                 const isEligibleAttacker = !!(humanCanAct && !isChoosingSwordTarget && phase === 'attack' && unit && getValidAttackers(humanPlayer, computerPlayer).some(attacker => attacker.instanceId === unit.instanceId));
-                const isHoldTarget = !!(humanCanAct && phase === 'react' && isChoosingSwordTarget && unit && unit.currentHp > 0);
+                const isHoldTarget = !!(humanCanAct && phase === 'react' && isChoosingSwordTarget && unit && unit.currentHp > 0 && !unit.keywords.includes('cat'));
 
                 return (
                   <FieldUnitView
