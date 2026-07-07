@@ -43,7 +43,7 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
     id: 'soldier_ghost',
     name: 'Soldier Ghost',
     cost: 2,
-    hp: 6,
+    hp: 5,
     atk: 1,
     keywords: ['taunt'],
     manifestText: '',
@@ -54,7 +54,7 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
     holdTrigger: 'when_leader_damaged',
     hasHold: true,
     token: false,
-    role: 'Taunt protector with high HP.',
+    role: 'Taunt protector.',
     artKey: 'soldier_ghost',
     themeColor: 'from-blue-500/20 to-indigo-600/30 border-blue-400/50'
   },
@@ -154,19 +154,19 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
   },
   fat_ghost: {
     id: 'fat_ghost',
-    name: 'Fat Ghost',
+    name: 'Tank Ghost',
     cost: 5,
-    hp: 12,
+    hp: 10,
     atk: 2,
     keywords: [],
-    manifestText: 'Huge wall. Survives through high HP; weak to Sword, Burn, and Bomb.',
+    manifestText: 'Huge wall. Survives through high HP; weak to Sword, Burn, Bomb, and Ritual.',
     fieldText: '',
     attackText: '',
     defeatText: '',
     holdText: '',
     hasHold: false,
     token: false,
-    role: 'Late-game tank with huge HP.',
+    role: 'Late-game wall with huge HP.',
     artKey: 'fat_ghost',
     themeColor: 'from-violet-500/20 to-purple-600/30 border-purple-400/50'
   },
@@ -193,7 +193,7 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
     id: 'ritual_ghost',
     name: 'Ritual Ghost',
     cost: 5,
-    hp: 8,
+    hp: 7,
     atk: 5,
     keywords: ['ritual'],
     manifestText: 'Sacrifice 2 friendly spirits to Manifest this huge ghost.',
@@ -208,6 +208,26 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
     artKey: 'ritual_ghost',
     themeColor: 'from-purple-500/20 to-fuchsia-800/30 border-purple-300/50'
   },
+  fog_ghost: {
+    id: 'fog_ghost',
+    name: 'Fog Ghost',
+    cost: 3,
+    hp: 3,
+    atk: 0,
+    keywords: ['fog'],
+    manifestText: 'If the enemy controls more spirits than you, draw 1 card.',
+    fieldText: '',
+    attackText: '',
+    defeatText: '',
+    holdText: 'When an enemy spirit attacks, if the enemy controls more spirits than you, cancel that attack.',
+    holdTrigger: 'when_enemy_attacks',
+    hasHold: true,
+    token: false,
+    role: 'Anti-snowball defense and comeback tool.',
+    artKey: 'fog_ghost',
+    themeColor: 'from-slate-300/20 to-cyan-700/30 border-cyan-200/50'
+  },
+
   wisp_token: {
     id: 'wisp_token',
     name: 'Wisp Token',
@@ -257,7 +277,8 @@ export const COLLECTIBLE_CARD_IDS = [
   'bones_ghost',
   'fat_ghost',
   'bomb_ghost',
-  'ritual_ghost'
+  'ritual_ghost',
+  'fog_ghost'
 ];
 
 export function getStandardPlayerCollection(): string[] {
@@ -271,10 +292,10 @@ export function getDefaultSelectedDeck(): string[] {
     'soldier_ghost',
     'lantern_ghost',
     'old_ghost',
+    'fog_ghost',
     'sword_ghost',
     'loud_ghost',
     'bones_ghost',
-    'fat_ghost',
     'bomb_ghost'
   ];
 }
@@ -285,11 +306,11 @@ export function getDefaultOpponentDeck(): string[] {
     'flame_ghost',
     'soldier_ghost',
     'lantern_ghost',
+    'fog_ghost',
     'loud_ghost',
     'bones_ghost',
     'sword_ghost',
     'fat_ghost',
-    'bomb_ghost',
-    'ritual_ghost'
+    'bomb_ghost'
   ];
 }

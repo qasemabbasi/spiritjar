@@ -151,6 +151,17 @@ export function GhostIcon({ artKey, className = "w-24 h-24" }: GhostIconProps) {
           <path d="M 50 8 L 56 24 L 72 24 L 59 33 L 64 49 L 50 39 L 36 49 L 41 33 L 28 24 L 44 24 Z" fill="#a855f7" opacity="0.75" />
         </svg>
       );
+    case 'fog_ghost':
+      return (
+        <svg viewBox="0 0 100 100" className={className}>
+          <path d="M 26 58 C 26 32, 74 32, 74 58 L 74 86 Q 62 78, 50 86 Q 38 78, 26 86 Z" fill="#cffafe" stroke="#67e8f9" strokeWidth="4" />
+          <circle cx="40" cy="48" r="3.5" fill="#164e63" opacity="0.8" />
+          <circle cx="60" cy="48" r="3.5" fill="#164e63" opacity="0.8" />
+          <path d="M 42 58 Q 50 54, 58 58" fill="none" stroke="#164e63" strokeWidth="3" strokeLinecap="round" opacity="0.8" />
+          <path d="M 10 35 Q 28 25, 45 35 T 80 35" fill="none" stroke="#a5f3fc" strokeWidth="7" strokeLinecap="round" opacity="0.75" />
+          <path d="M 18 68 Q 36 58, 55 68 T 92 68" fill="none" stroke="#e0f2fe" strokeWidth="8" strokeLinecap="round" opacity="0.75" />
+        </svg>
+      );
     case 'bone_pile_token':
       return (
         <svg viewBox="0 0 100 100" className={className}>

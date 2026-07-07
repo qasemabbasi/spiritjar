@@ -13,7 +13,7 @@ interface BattleScreenProps {
   onRestart: () => void;
 }
 
-const STARTING_LEADER_HP = 12;
+const STARTING_LEADER_HP = 10;
 const MAX_PSY = 10;
 const FIELD_LIMIT = 4;
 const HAND_LIMIT = 5;
@@ -186,6 +186,10 @@ function isHoldCardLegallyUsable(card: CardInstance, ctx: ReactionContext, playe
     return ctx.trigger === 'when_enemy_attacks' && !!attacker && attacker.burn < MAX_BURN;
   }
 
+  if (def.id === 'fog_ghost') {
+    return ctx.trigger === 'when_enemy_attacks' && !!attacker && sourcePlayer.field.length > reactingPlayer.field.length;
+  }
+
   if (def.id === 'soldier_ghost') {
     return ctx.trigger === 'when_leader_damaged' && reactingPlayer.field.length < FIELD_LIMIT;
   }
@@ -235,6 +239,14 @@ function getAiReactionHoldScore(card: CardInstance, ctx: ReactionContext, player
     if (attacker.keywords.includes('token')) return -20;
     if (attacker.currentHp >= 3 || attacker.atk >= 3 || attackerDef.cost >= 3) return 70;
     return 10;
+  }
+
+  if (def.id === 'fog_ghost') {
+    if (!attacker) return -999;
+    if (players[ctx.sourcePlayerIndex].field.length <= reactingPlayer.field.length) return -999;
+    if (ctx.incomingDamage && ctx.incomingDamage >= reactingPlayer.leaderHp) return 95;
+    if (attacker.atk >= 3 || BASE_CARDS[attacker.cardId].cost >= 3) return 65;
+    return 20;
   }
 
   if (def.id === 'sword_ghost') {
@@ -849,6 +861,25 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         });
       }
 
+      if (def.id === 'fog_ghost') {
+        const enemyIdx = currentPlayer === 0 ? 1 : 0;
+        if (copy[enemyIdx].field.length > player.field.length) {
+          addLog('🌫️ Fog Ghost buys time while you are outnumbered. Draw 1 card.', 'effect');
+          let currentDeck = [...sharedDeck];
+          let currentDiscard = [...discardPile];
+          const reshuffled = checkReshuffle(currentDeck, currentDiscard);
+          currentDeck = reshuffled.newDeck;
+          currentDiscard = reshuffled.newDiscard;
+          setDiscardPile(currentDiscard);
+          if (currentDeck.length > 0 && player.hand.length < HAND_LIMIT) {
+            const drawn = currentDeck[0];
+            player.hand = [...player.hand, drawn];
+            setSharedDeck(currentDeck.slice(1));
+            addLog(`🃏 ${player.name} drew ${BASE_CARDS[drawn.cardId].name} from Fog Ghost.`, 'turn');
+          }
+        }
+      }
+
       if (def.id === 'old_ghost') {
         const healedName = healMostDamagedFriendly(player, 2);
         if (healedName) {
@@ -873,7 +904,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       targetPlayerIndex: enemyIdx,
       sourceSpiritInstanceId: instance.instanceId
     });
-  }, [addLog, currentPlayer, phase, players, reactionContext, resolveDefeatedUnits, triggerHoldReactionWindow, turnCount, winner]);
+  }, [addLog, checkReshuffle, currentPlayer, discardPile, phase, players, reactionContext, resolveDefeatedUnits, sharedDeck, triggerHoldReactionWindow, turnCount, winner]);
 
   const handleTargetClick = useCallback((targetUnit?: FieldSpirit, isEnemyLeader?: boolean) => {
     if (phase !== 'attack' || !selectedAttackerId || reactionContext || winner) return;
@@ -1101,7 +1132,12 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     const sourcePlayerIdx = reactionContext.sourcePlayerIndex as 0 | 1;
     const attacker = players[sourcePlayerIdx].field.find(unit => unit.instanceId === reactionContext.sourceSpiritInstanceId);
 
-    if (def.id === 'bomb_ghost') {
+    if (def.id === 'fog_ghost') {
+      if (attacker) {
+        addLog(`🌫️ Fog Ghost cancels ${BASE_CARDS[attacker.cardId].name}'s attack because ${players[sourcePlayerIdx].name} is outnumbering ${reactingPlayer.name}.`, 'effect');
+        exhaustAttacker(sourcePlayerIdx, attacker.instanceId);
+      }
+    } else if (def.id === 'bomb_ghost') {
       if (attacker) {
         addLog(`💣 Bomb Ghost blasts the attacking ${BASE_CARDS[attacker.cardId].name} for 4 damage!`, 'effect');
         setPlayers(prev => {

@@ -61,6 +61,11 @@ const KEYWORD_INFO: Record<Keyword, { label: string; color: string; desc: string
     label: 'RITUAL',
     color: 'bg-purple-500/20 text-purple-300 border-purple-400/40',
     desc: 'Requires sacrificing friendly spirits to Manifest.'
+  },
+  fog: {
+    label: 'FOG',
+    color: 'bg-cyan-500/20 text-cyan-200 border-cyan-300/40',
+    desc: 'Cancels an enemy attack if you are outnumbered.'
   }
 };
 

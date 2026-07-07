@@ -4,7 +4,7 @@ Spirit Jar is a single-player prototype card battler: **Player 1 vs Spirit Lord 
 
 ## Core rules
 
-- Each player has a Leader with 12 HP. Reduce the enemy Leader to 0 to shatter their Spirit Jar.
+- Each player has a Leader with 10 HP. Reduce the enemy Leader to 0 to shatter their Spirit Jar.
 - Each player brings a separate 10-card deck. The player deck and AI deck shuffle together into one Draw Jar.
 - Draw 1 card per turn. Maximum hand size is 5.
 - Psy refills by round: round 1 = 1/1, round 2 = 2/2, round 3 = 3/3, up to 10/10.
@@ -27,7 +27,8 @@ Spirit Jar is a single-player prototype card battler: **Player 1 vs Spirit Lord 
 - Sword Ghost: fragile high-ATK attacker and attack trick.
 - Loud Ghost: splash and board chip.
 - Bones Ghost: Bone Pile recursion.
-- Fat Ghost: large HP wall.
+- Tank Ghost: large HP wall.
+- Fog Ghost: anti-snowball Hold that cancels an attack when you are outnumbered.
 - Bomb Ghost: board damage and emergency Hold blast.
 - Ritual Ghost: sacrifice payoff and revive Hold.
 

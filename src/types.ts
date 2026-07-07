@@ -9,7 +9,8 @@ export type Keyword =
   | 'token'
   | 'boom'
   | 'strike'
-  | 'ritual';
+  | 'ritual'
+  | 'fog';
 
 export type HoldTrigger = 
   | 'when_attacked' 
