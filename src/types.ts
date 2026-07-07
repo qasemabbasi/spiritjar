@@ -13,7 +13,7 @@ export type Keyword =
 
 export type HoldTrigger = 
   | 'when_attacked' 
-  | 'when_jar_damaged' 
+  | 'when_leader_damaged' 
   | 'when_enemy_summons' 
   | 'when_enemy_summons_token' 
   | 'when_spirit_defeated' 
@@ -30,7 +30,6 @@ export interface CardDefinition {
   cost: number;
   hp: number;
   atk: number;
-  def: number;
   keywords: Keyword[];
   manifestText: string;
   fieldText: string;
@@ -57,7 +56,6 @@ export interface FieldSpirit {
   currentHp: number;
   maxHp: number;
   atk: number;
-  def: number;
   keywords: Keyword[];
   canAttackThisTurn: boolean;
   summonedTurn: number;
@@ -72,7 +70,7 @@ export interface PlayerState {
   id: number;
   name: string;
   isBot: boolean;
-  jarHp: number;
+  leaderHp: number;
   maxPsy: number;
   currentPsy: number;
   hand: CardInstance[];

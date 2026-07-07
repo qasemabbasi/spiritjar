@@ -113,7 +113,7 @@ export function FieldUnitView({
       )}
 
       {/* Stats Footer Grid */}
-      <div className="w-full grid grid-cols-3 bg-indigo-950/90 text-center py-1.5 border-t border-cyan-500/30 font-mono">
+      <div className="w-full grid grid-cols-2 bg-indigo-950/90 text-center py-1.5 border-t border-cyan-500/30 font-mono">
         <div>
           <div className="text-[7.5px] text-slate-400 uppercase tracking-wider">HP</div>
           <div className={`font-bold text-sm ${spirit.currentHp < spirit.maxHp ? 'text-rose-400' : 'text-emerald-400'}`}>
@@ -126,19 +126,13 @@ export function FieldUnitView({
             {spirit.atk < 10 ? `0${spirit.atk}` : spirit.atk}
           </div>
         </div>
-        <div>
-          <div className="text-[7.5px] text-slate-400 uppercase tracking-wider">DEF</div>
-          <div className="font-bold text-sm text-blue-400">
-            {spirit.def < 10 ? `0${spirit.def}` : spirit.def}
-          </div>
-        </div>
       </div>
 
       {/* Field hover helper */}
       <div className="pointer-events-none absolute left-1/2 bottom-full z-[70] mb-2 w-56 -translate-x-1/2 rounded-xl border border-cyan-500/60 bg-slate-950/95 p-3 text-left shadow-2xl opacity-0 scale-95 transition-all group-hover/unit:opacity-100 group-hover/unit:scale-100">
         <div className="mb-1 font-black uppercase tracking-tight text-cyan-300">{cardDef.name}</div>
         <div className="mb-2 text-[10px] text-slate-400">
-          Current: {spirit.currentHp}/{spirit.maxHp} HP • {spirit.atk} ATK • {spirit.def} DEF
+          Current: {spirit.currentHp}/{spirit.maxHp} HP • {spirit.atk} ATK
         </div>
         <div className="space-y-1 text-[10px] leading-tight text-slate-200">
           {cardDef.manifestText && <div><span className="font-bold text-cyan-400">MANIFEST:</span> {cardDef.manifestText}</div>}

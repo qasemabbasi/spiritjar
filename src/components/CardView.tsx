@@ -114,7 +114,7 @@ export function CardView({
           )}
 
           {/* Stats Row */}
-          <div className={`${compact ? 'my-0.5 py-0.5' : 'my-1 py-1'} grid grid-cols-3 text-center bg-black/40 rounded border border-slate-800 font-mono`}>
+          <div className={`${compact ? 'my-0.5 py-0.5' : 'my-1 py-1'} grid grid-cols-2 text-center bg-black/40 rounded border border-slate-800 font-mono`}>
             <div>
               <div className="text-[11px] font-bold text-emerald-400">{card.hp}</div>
               <div className="text-[7px] text-slate-400 uppercase tracking-wider">HP</div>
@@ -122,10 +122,6 @@ export function CardView({
             <div>
               <div className="text-[11px] font-bold text-orange-400">{card.atk}</div>
               <div className="text-[7px] text-slate-400 uppercase tracking-wider">ATK</div>
-            </div>
-            <div>
-              <div className="text-[11px] font-bold text-blue-400">{card.def}</div>
-              <div className="text-[7px] text-slate-400 uppercase tracking-wider">DEF</div>
             </div>
           </div>
 

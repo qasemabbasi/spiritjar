@@ -35,7 +35,7 @@ const KEYWORD_INFO: Record<Keyword, { label: string; color: string; desc: string
   cat: {
     label: 'CAT',
     color: 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-400/40',
-    desc: 'Can only be damaged by Cat Ghosts. Cannot attack Jar.'
+    desc: 'Cannot be targeted by non-Cat attacks. Can attack Leaders.'
   },
   rush: {
     label: 'RUSH',

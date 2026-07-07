@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BASE_CARDS, getStandardPlayerCollection, getDefaultSelectedDeck } from '../data/cards';
+import { BASE_CARDS, getStandardPlayerCollection, getDefaultSelectedDeck, getDefaultOpponentDeck } from '../data/cards';
 import { CardDefinition } from '../types';
 import { CardView } from './CardView';
 import { sounds } from '../utils/audio';
@@ -12,7 +12,7 @@ function SetupCardDetail({ card }: { card: CardDefinition | null }) {
   if (!card) {
     return (
       <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 text-xs leading-relaxed text-slate-500 font-mono">
-        Hover or focus a card to read its full rules before adding it to your Jar.
+        Hover or focus a card to read its full rules before adding it to your 10-card deck.
       </div>
     );
   }
@@ -29,10 +29,9 @@ function SetupCardDetail({ card }: { card: CardDefinition | null }) {
         <div className="rounded-full bg-cyan-500 px-3 py-1 text-sm font-black text-slate-950">{card.cost} Psy</div>
       </div>
 
-      <div className="mb-3 grid grid-cols-3 rounded-xl border border-indigo-800/70 bg-indigo-950/70 py-2 text-center font-mono text-sm">
+      <div className="mb-3 grid grid-cols-2 rounded-xl border border-indigo-800/70 bg-indigo-950/70 py-2 text-center font-mono text-sm">
         <div><span className="font-black text-emerald-400">{card.hp}</span><span className="ml-1 text-slate-500">HP</span></div>
         <div><span className="font-black text-orange-400">{card.atk}</span><span className="ml-1 text-slate-500">ATK</span></div>
-        <div><span className="font-black text-blue-400">{card.def}</span><span className="ml-1 text-slate-500">DEF</span></div>
       </div>
 
       <div className="space-y-2 text-xs leading-snug text-slate-200">
@@ -79,7 +78,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
 
   const startBattle = (selectedDeck: string[]) => {
     sounds.playWin();
-    onComplete(selectedDeck, selectedDeck, true);
+    onComplete(selectedDeck, getDefaultOpponentDeck(), true);
   };
 
   const uniqueCards = Object.values(BASE_CARDS).filter(c => !c.token);
@@ -138,7 +137,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
             <div>
               <h1 className="text-3xl font-black tracking-tighter text-cyan-400">SPIRIT JAR</h1>
               <h2 className="text-xs uppercase tracking-widest font-bold text-slate-400">
-                Pick 10 ghosts. The AI mirrors your exact 10-card deck, then both decks shuffle into one Draw Jar.
+                Pick 10 ghosts. The AI brings its own 10-card deck, then both decks shuffle into one Draw Jar.
               </h2>
             </div>
 
@@ -192,13 +191,13 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
         {/* Selected Deck Sidebar */}
         <div className="flex flex-col bg-[#020617] border border-slate-800 rounded-xl p-4 overflow-hidden">
           <h3 className="text-xs uppercase font-bold tracking-widest text-cyan-400 mb-3 border-b border-slate-800 pb-2">
-            Your Jar Selection ({p1Selected.length}/10)
+            Your 10-Card Deck ({p1Selected.length}/10)
           </h3>
 
           <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1 font-mono text-xs">
             {p1Selected.length === 0 ? (
               <div className="text-slate-600 text-center py-12 text-xs italic">
-                Click cards on the left to add them to your secret selection.
+                Click cards on the left to add them to your deck.
               </div>
             ) : (
               p1Selected.map((cardId, idx) => {
@@ -225,8 +224,8 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
           </div>
 
           <div className="mt-4 pt-4 border-t border-slate-800 text-[10px] text-slate-500 leading-relaxed font-mono">
-            <div>🤖 Mirror match: AI uses the same 10 ghosts you select.</div>
-            <div>🏺 Both 10-card decks shuffle into one Draw Jar.</div>
+            <div>🤖 AI brings its own Spirit Lord deck.</div>
+            <div>🏺 Your deck + AI deck shuffle into one Draw Jar.</div>
             <div>🤖 The Spirit Lord always plays from the top.</div>
             <div>🧠 You always play from the bottom.</div>
             <div>🔮 Psy refills each turn: turn 1 = 1/1, turn 2 = 2/2, turn 3 = 3/3.</div>
