@@ -20,6 +20,24 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
     artKey: 'cat_ghost',
     themeColor: 'from-fuchsia-500/20 to-purple-600/30 border-fuchsia-400/50'
   },
+  bite_ghost: {
+    id: 'bite_ghost',
+    name: 'Bite Ghost',
+    cost: 1,
+    hp: 1,
+    atk: 2,
+    keywords: ['bite'],
+    manifestText: '',
+    fieldText: '',
+    attackText: 'Fast early attacker. Can attack the Leader if the enemy controls only tokens.',
+    defeatText: '',
+    holdText: '',
+    hasHold: false,
+    token: false,
+    role: 'Fragile 1-cost pressure that speeds up early turns.',
+    artKey: 'bite_ghost',
+    themeColor: 'from-rose-500/20 to-red-700/30 border-rose-300/50'
+  },
   flame_ghost: {
     id: 'flame_ghost',
     name: 'Flame Ghost',
@@ -38,6 +56,24 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
     role: 'Burn pressure against high-HP spirits.',
     artKey: 'flame_ghost',
     themeColor: 'from-red-500/20 to-orange-600/30 border-red-400/50'
+  },
+  spear_ghost: {
+    id: 'spear_ghost',
+    name: 'Spear Ghost',
+    cost: 2,
+    hp: 3,
+    atk: 3,
+    keywords: ['spear'],
+    manifestText: '',
+    fieldText: '',
+    attackText: 'Clean early combat attacker with no setup required.',
+    defeatText: '',
+    holdText: '',
+    hasHold: false,
+    token: false,
+    role: 'Reliable 2-cost attacker that keeps games moving.',
+    artKey: 'spear_ghost',
+    themeColor: 'from-lime-500/20 to-emerald-700/30 border-lime-300/50'
   },
   soldier_ghost: {
     id: 'soldier_ghost',
@@ -63,7 +99,7 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
     name: 'Lantern Ghost',
     cost: 2,
     hp: 4,
-    atk: 1,
+    atk: 2,
     keywords: ['lure'],
     manifestText: 'Summon one Wisp if you have field space.',
     fieldText: 'At end of your turn, if you control no Wisps and have field space, summon one Wisp.',
@@ -177,7 +213,7 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
     hp: 1,
     atk: 0,
     keywords: ['boom'],
-    manifestText: 'Explode immediately. Deal 4 damage to all spirits on both fields. This can hit Cats. Does not damage Leaders.',
+    manifestText: 'Explode immediately. Deal 4 damage to all spirits on both fields and 1 damage to both Leaders. This can hit Cats.',
     fieldText: '',
     attackText: '',
     defeatText: '',
@@ -215,15 +251,15 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
     hp: 3,
     atk: 0,
     keywords: ['fog'],
-    manifestText: 'If the enemy controls more spirits than you, draw 1 card.',
+    manifestText: 'If the enemy controls at least 2 more spirits than you, draw 1 card.',
     fieldText: '',
     attackText: '',
     defeatText: '',
-    holdText: 'When an enemy spirit attacks, if the enemy controls more spirits than you, cancel that attack.',
+    holdText: 'When an enemy spirit attacks, if the enemy controls at least 2 more spirits than you, cancel that attack.',
     holdTrigger: 'when_enemy_attacks',
     hasHold: true,
     token: false,
-    role: 'Anti-snowball defense and comeback tool.',
+    role: 'Anti-snowball defense that only works when you are badly outnumbered.',
     artKey: 'fog_ghost',
     themeColor: 'from-slate-300/20 to-cyan-700/30 border-cyan-200/50'
   },
@@ -268,7 +304,9 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
 
 export const COLLECTIBLE_CARD_IDS = [
   'cat_ghost',
+  'bite_ghost',
   'flame_ghost',
+  'spear_ghost',
   'soldier_ghost',
   'lantern_ghost',
   'old_ghost',
@@ -287,12 +325,12 @@ export function getStandardPlayerCollection(): string[] {
 
 export function getDefaultSelectedDeck(): string[] {
   return [
+    'bite_ghost',
     'cat_ghost',
     'flame_ghost',
+    'spear_ghost',
     'soldier_ghost',
     'lantern_ghost',
-    'old_ghost',
-    'fog_ghost',
     'sword_ghost',
     'loud_ghost',
     'bones_ghost',
@@ -302,14 +340,14 @@ export function getDefaultSelectedDeck(): string[] {
 
 export function getDefaultOpponentDeck(): string[] {
   return [
+    'bite_ghost',
     'cat_ghost',
     'flame_ghost',
+    'spear_ghost',
     'soldier_ghost',
     'lantern_ghost',
-    'fog_ghost',
-    'loud_ghost',
-    'bones_ghost',
     'sword_ghost',
+    'loud_ghost',
     'fat_ghost',
     'bomb_ghost'
   ];

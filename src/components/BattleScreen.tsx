@@ -76,14 +76,21 @@ function hasValidUnitTarget(attacker: FieldSpirit, enemy: PlayerState, target?: 
   return true;
 }
 
+function canAttackLeaderTarget(attacker: FieldSpirit, enemy: PlayerState): boolean {
+  if (enemy.field.length === 0) return true;
+
+  if (attacker.cardId === 'bite_ghost' && enemy.field.every(unit => unit.keywords.includes('token'))) {
+    return true;
+  }
+
+  return false;
+}
+
 function hasValidAttackTarget(attacker: FieldSpirit, enemy: PlayerState): boolean {
   const validUnitTarget = enemy.field.some(target => hasValidUnitTarget(attacker, enemy, target));
   if (validUnitTarget) return true;
 
-  if (enemy.field.length > 0) return false;
-
-  // Cats can now chip the Leader if they slip through.
-  return true;
+  return canAttackLeaderTarget(attacker, enemy);
 }
 
 function getValidAttackers(player: PlayerState, enemy: PlayerState): FieldSpirit[] {
@@ -91,6 +98,10 @@ function getValidAttackers(player: PlayerState, enemy: PlayerState): FieldSpirit
 }
 
 function getBestAiTarget(attacker: FieldSpirit, enemy: PlayerState): FieldSpirit | undefined {
+  if (attacker.cardId === 'bite_ghost' && enemy.field.length > 0 && enemy.field.every(target => target.keywords.includes('token'))) {
+    return undefined;
+  }
+
   const validTargets = enemy.field.filter(target => hasValidUnitTarget(attacker, enemy, target));
   if (validTargets.length === 0) return undefined;
 
@@ -187,7 +198,7 @@ function isHoldCardLegallyUsable(card: CardInstance, ctx: ReactionContext, playe
   }
 
   if (def.id === 'fog_ghost') {
-    return ctx.trigger === 'when_enemy_attacks' && !!attacker && sourcePlayer.field.length > reactingPlayer.field.length;
+    return ctx.trigger === 'when_enemy_attacks' && !!attacker && sourcePlayer.field.length >= reactingPlayer.field.length + 2;
   }
 
   if (def.id === 'soldier_ghost') {
@@ -243,7 +254,7 @@ function getAiReactionHoldScore(card: CardInstance, ctx: ReactionContext, player
 
   if (def.id === 'fog_ghost') {
     if (!attacker) return -999;
-    if (players[ctx.sourcePlayerIndex].field.length <= reactingPlayer.field.length) return -999;
+    if (players[ctx.sourcePlayerIndex].field.length < reactingPlayer.field.length + 2) return -999;
     if (ctx.incomingDamage && ctx.incomingDamage >= reactingPlayer.leaderHp) return 95;
     if (attacker.atk >= 3 || BASE_CARDS[attacker.cardId].cost >= 3) return 65;
     return 20;
@@ -815,10 +826,11 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       player.hasManifestedThisTurn = true;
 
       if (def.id === 'bomb_ghost') {
-        addLog('💣 Bomb Ghost explodes for 4 damage to every spirit on both fields! This can hit Cats.', 'effect');
+        addLog('💣 Bomb Ghost explodes for 4 damage to every spirit and 1 damage to both Leaders! This can hit Cats.', 'effect');
         sounds.playBurn();
         copy.forEach(boardPlayer => {
           boardPlayer.field = boardPlayer.field.map(unit => ({ ...unit, currentHp: unit.currentHp - 4 }));
+          boardPlayer.leaderHp -= 1;
         });
         setDiscardPile(dp => [...dp, instance]);
         return copy;
@@ -863,8 +875,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
 
       if (def.id === 'fog_ghost') {
         const enemyIdx = currentPlayer === 0 ? 1 : 0;
-        if (copy[enemyIdx].field.length > player.field.length) {
-          addLog('🌫️ Fog Ghost buys time while you are outnumbered. Draw 1 card.', 'effect');
+        if (copy[enemyIdx].field.length >= player.field.length + 2) {
+          addLog('🌫️ Fog Ghost buys time while you are badly outnumbered. Draw 1 card.', 'effect');
           let currentDeck = [...sharedDeck];
           let currentDiscard = [...discardPile];
           const reshuffled = checkReshuffle(currentDeck, currentDiscard);
@@ -915,8 +927,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     if (!attacker || !attacker.canAttackThisTurn) return;
 
     if (isEnemyLeader) {
-      if (enemy.field.length > 0) {
-        addLog('⚠️ Cannot attack enemy Leader while opponent controls spirits!', 'system');
+      if (!canAttackLeaderTarget(attacker, enemy)) {
+        addLog('⚠️ Cannot attack enemy Leader while opponent controls protecting spirits!', 'system');
         return;
       }
       const hasReaction = triggerHoldReactionWindow({
@@ -1134,7 +1146,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
 
     if (def.id === 'fog_ghost') {
       if (attacker) {
-        addLog(`🌫️ Fog Ghost cancels ${BASE_CARDS[attacker.cardId].name}'s attack because ${players[sourcePlayerIdx].name} is outnumbering ${reactingPlayer.name}.`, 'effect');
+        addLog(`🌫️ Fog Ghost cancels ${BASE_CARDS[attacker.cardId].name}'s attack because ${players[sourcePlayerIdx].name} has at least 2 more spirits than ${reactingPlayer.name}.`, 'effect');
         exhaustAttacker(sourcePlayerIdx, attacker.instanceId);
       }
     } else if (def.id === 'bomb_ghost') {
@@ -1355,7 +1367,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
   const isHumanTurn = currentPlayer === 0;
   const humanCanAct = isHumanTurn && !winner && !autoplay;
   const selectedAttacker = humanPlayer.field.find(unit => unit.instanceId === selectedAttackerId);
-  const canAttackEnemyLeader = !!selectedAttacker && computerPlayer.field.length === 0;
+  const canAttackEnemyLeader = !!selectedAttacker && canAttackLeaderTarget(selectedAttacker, computerPlayer);
   const humanValidAttackers = getValidAttackers(humanPlayer, computerPlayer);
 
   const isCardUsableReaction = (card: CardInstance) => {

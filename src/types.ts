@@ -5,6 +5,8 @@ export type Keyword =
   | 'lure' 
   | 'regen' 
   | 'cat' 
+  | 'bite'
+  | 'spear'
   | 'rush' 
   | 'token'
   | 'boom'

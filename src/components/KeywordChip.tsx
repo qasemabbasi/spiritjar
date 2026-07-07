@@ -37,6 +37,16 @@ const KEYWORD_INFO: Record<Keyword, { label: string; color: string; desc: string
     color: 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-400/40',
     desc: 'Cannot be targeted by non-Cat attacks. Can attack Leaders.'
   },
+  bite: {
+    label: 'BITE',
+    color: 'bg-rose-500/20 text-rose-300 border-rose-400/40',
+    desc: 'Fast early pressure. Can slip past token-only boards to attack Leader.'
+  },
+  spear: {
+    label: 'SPEAR',
+    color: 'bg-lime-500/20 text-lime-300 border-lime-400/40',
+    desc: 'Efficient 2-cost attacker with clean damage.'
+  },
   rush: {
     label: 'RUSH',
     color: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40',
@@ -50,7 +60,7 @@ const KEYWORD_INFO: Record<Keyword, { label: string; color: string; desc: string
   boom: {
     label: 'BOOM',
     color: 'bg-yellow-500/20 text-yellow-300 border-yellow-400/40',
-    desc: 'Explodes on Manifest and clears non-Cat spirits.'
+    desc: 'Explodes on Manifest, damaging all spirits and both Leaders.'
   },
   strike: {
     label: 'STRIKE',
@@ -65,7 +75,7 @@ const KEYWORD_INFO: Record<Keyword, { label: string; color: string; desc: string
   fog: {
     label: 'FOG',
     color: 'bg-cyan-500/20 text-cyan-200 border-cyan-300/40',
-    desc: 'Cancels an enemy attack if you are outnumbered.'
+    desc: 'Cancels an enemy attack if you are badly outnumbered.'
   }
 };
 

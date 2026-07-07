@@ -11,7 +11,7 @@ Spirit Jar is a single-player prototype card battler: **Player 1 vs Spirit Lord 
 - Manifest 1 ghost per turn by paying its Psy cost.
 - Each player has 4 field slots.
 - Each ready spirit can attack once per turn.
-- Enemy spirits protect the Leader. Clear enemy spirits before attacking the Leader.
+- Enemy spirits protect the Leader. Clear enemy spirits before attacking the Leader, except Bite Ghost can slip past token-only boards.
 - Combat has no Defense stat. Attack damage equals ATK.
 - Burn, Splash, Bomb, and other effects deal their listed damage.
 - Cat Ghost can attack Leaders, cannot be targeted by non-Cat normal attacks, can be damaged by effects, and cannot receive ATK buffs.
@@ -19,17 +19,19 @@ Spirit Jar is a single-player prototype card battler: **Player 1 vs Spirit Lord 
 
 ## Prototype card roles
 
+- Bite Ghost: fragile 1-cost pressure that can slip past token-only boards.
 - Cat Ghost: cheap evasive chip attacker.
 - Flame Ghost: burn pressure.
+- Spear Ghost: clean 2-cost attacker that keeps early combat moving.
 - Soldier Ghost: Taunt protector.
-- Lantern Ghost: Wisp generator.
+- Lantern Ghost: Wisp generator with improved early attack.
 - Old Ghost: healing and bonus Psy on defeat.
 - Sword Ghost: fragile high-ATK attacker and attack trick.
 - Loud Ghost: splash and board chip.
 - Bones Ghost: Bone Pile recursion.
 - Tank Ghost: large HP wall.
-- Fog Ghost: anti-snowball Hold that cancels an attack when you are outnumbered.
-- Bomb Ghost: board damage and emergency Hold blast.
+- Fog Ghost: anti-snowball Hold that cancels an attack only when you are badly outnumbered.
+- Bomb Ghost: board damage, 1 damage to both Leaders, and emergency Hold blast.
 - Ritual Ghost: sacrifice payoff and revive Hold.
 
 ## Development
