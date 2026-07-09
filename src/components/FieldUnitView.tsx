@@ -13,6 +13,7 @@ interface FieldUnitViewProps {
   onClick?: () => void;
   className?: string;
   slotIndex?: number;
+  ownershipLabel?: string;
 }
 
 export function FieldUnitView({
@@ -23,7 +24,8 @@ export function FieldUnitView({
   isSelectedForAttack = false,
   onClick,
   className = '',
-  slotIndex
+  slotIndex,
+  ownershipLabel
 }: FieldUnitViewProps) {
   if (isEmpty || !spirit) {
     return (
@@ -64,6 +66,11 @@ export function FieldUnitView({
       {/* Top Badges */}
       <div className="absolute top-2 left-2 right-2 flex justify-between items-start z-10 pointer-events-none">
         <div className="flex flex-col gap-1 items-start">
+          {ownershipLabel && (
+            <span className={`px-1.5 py-0.5 rounded text-[8px] font-black shadow border ${ownershipLabel.includes('BORROWED') ? 'bg-fuchsia-900/80 border-fuchsia-400 text-fuchsia-100' : ownershipLabel.includes('ENEMY') ? 'bg-rose-900/80 border-rose-400 text-rose-100' : 'bg-cyan-900/80 border-cyan-400 text-cyan-100'}`}>
+              {ownershipLabel}
+            </span>
+          )}
           {hasTaunt && (
             <span className="px-1.5 py-0.5 bg-cyan-600 rounded text-[9px] font-black text-white shadow">
               TAUNT
@@ -132,7 +139,7 @@ export function FieldUnitView({
       <div className="pointer-events-none absolute left-1/2 bottom-full z-[70] mb-2 w-56 -translate-x-1/2 rounded-xl border border-cyan-500/60 bg-slate-950/95 p-3 text-left shadow-2xl opacity-0 scale-95 transition-all group-hover/unit:opacity-100 group-hover/unit:scale-100">
         <div className="mb-1 font-black uppercase tracking-tight text-cyan-300">{cardDef.name}</div>
         <div className="mb-2 text-[10px] text-slate-400">
-          Current: {spirit.currentHp}/{spirit.maxHp} HP • {spirit.atk} ATK
+          Current: {spirit.currentHp}/{spirit.maxHp} HP • {spirit.atk} ATK{ownershipLabel ? ` • ${ownershipLabel}` : ''}
         </div>
         <div className="space-y-1 text-[10px] leading-tight text-slate-200">
           {cardDef.manifestText && <div><span className="font-bold text-cyan-400">MANIFEST:</span> {cardDef.manifestText}</div>}

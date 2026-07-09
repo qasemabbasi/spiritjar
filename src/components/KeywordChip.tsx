@@ -50,7 +50,7 @@ const KEYWORD_INFO: Record<Keyword, { label: string; color: string; desc: string
   rush: {
     label: 'RUSH',
     color: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/40',
-    desc: 'Can attack immediately on Manifest turn.'
+    desc: 'Can attack enemy spirits on Manifest turn. Cannot attack Leaders until next turn.'
   },
   token: {
     label: 'TOKEN',
@@ -76,6 +76,21 @@ const KEYWORD_INFO: Record<Keyword, { label: string; color: string; desc: string
     label: 'FOG',
     color: 'bg-cyan-500/20 text-cyan-200 border-cyan-300/40',
     desc: 'Cancels an enemy attack if you are badly outnumbered.'
+  },
+  possess: {
+    label: 'POSSESS',
+    color: 'bg-indigo-500/20 text-indigo-200 border-indigo-300/40',
+    desc: 'Moves control of a damaged ghost that is Bound to you.'
+  },
+  oath: {
+    label: 'OATH',
+    color: 'bg-fuchsia-500/20 text-fuchsia-200 border-fuchsia-300/40',
+    desc: 'Uses your claim on a ghost for a big sacrifice swing.'
+  },
+  caller: {
+    label: 'CALLER',
+    color: 'bg-teal-500/20 text-teal-200 border-teal-300/40',
+    desc: 'Returns defeated Bound ghosts to your hand.'
   }
 };
 

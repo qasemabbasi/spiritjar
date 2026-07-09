@@ -54,6 +54,36 @@ function makeSpirit(instance: CardInstance, turnCount: number, currentPlayer: 0 
   };
 }
 
+
+function getOwnershipLabel(originalOwner: number, perspectivePlayerIdx: 0 | 1, controllerIdx?: 0 | 1): string {
+  if (originalOwner === perspectivePlayerIdx) {
+    return controllerIdx !== undefined && controllerIdx !== perspectivePlayerIdx ? 'BOUND TO YOU' : 'BOUND';
+  }
+  return controllerIdx !== undefined && controllerIdx !== perspectivePlayerIdx ? 'ENEMY BOUND' : 'BORROWED';
+}
+
+function getBoundGhostsOnEitherField(players: PlayerState[], ownerIdx: 0 | 1): Array<{ unit: FieldSpirit; controllerIdx: 0 | 1 }> {
+  return players.flatMap((player, pIdx) =>
+    player.field
+      .filter(unit => unit.currentHp > 0 && !unit.keywords.includes('token') && unit.originalOwner === ownerIdx)
+      .map(unit => ({ unit, controllerIdx: pIdx as 0 | 1 }))
+  );
+}
+
+function sortClaimTargets(targets: Array<{ unit: FieldSpirit; controllerIdx: 0 | 1 }>, preferOpponentIdx?: 0 | 1): Array<{ unit: FieldSpirit; controllerIdx: 0 | 1 }> {
+  return [...targets].sort((a, b) => {
+    if (preferOpponentIdx !== undefined) {
+      const aOnPreferred = a.controllerIdx === preferOpponentIdx ? 1 : 0;
+      const bOnPreferred = b.controllerIdx === preferOpponentIdx ? 1 : 0;
+      if (bOnPreferred !== aOnPreferred) return bOnPreferred - aOnPreferred;
+    }
+    const aCost = BASE_CARDS[a.unit.cardId]?.cost ?? 0;
+    const bCost = BASE_CARDS[b.unit.cardId]?.cost ?? 0;
+    if (b.unit.atk !== a.unit.atk) return b.unit.atk - a.unit.atk;
+    return bCost - aCost;
+  });
+}
+
 function shuffleDeck(deck: CardInstance[]): CardInstance[] {
   const copy = [...deck];
   for (let i = copy.length - 1; i > 0; i -= 1) {
@@ -76,7 +106,9 @@ function hasValidUnitTarget(attacker: FieldSpirit, enemy: PlayerState, target?: 
   return true;
 }
 
-function canAttackLeaderTarget(attacker: FieldSpirit, enemy: PlayerState): boolean {
+function canAttackLeaderTarget(attacker: FieldSpirit, enemy: PlayerState, currentTurn: number): boolean {
+  if (attacker.keywords.includes('rush') && attacker.summonedTurn === currentTurn) return false;
+
   if (enemy.field.length === 0) return true;
 
   if (attacker.cardId === 'bite_ghost' && enemy.field.every(unit => unit.keywords.includes('token'))) {
@@ -86,15 +118,15 @@ function canAttackLeaderTarget(attacker: FieldSpirit, enemy: PlayerState): boole
   return false;
 }
 
-function hasValidAttackTarget(attacker: FieldSpirit, enemy: PlayerState): boolean {
+function hasValidAttackTarget(attacker: FieldSpirit, enemy: PlayerState, currentTurn: number): boolean {
   const validUnitTarget = enemy.field.some(target => hasValidUnitTarget(attacker, enemy, target));
   if (validUnitTarget) return true;
 
-  return canAttackLeaderTarget(attacker, enemy);
+  return canAttackLeaderTarget(attacker, enemy, currentTurn);
 }
 
-function getValidAttackers(player: PlayerState, enemy: PlayerState): FieldSpirit[] {
-  return player.field.filter(unit => unit.canAttackThisTurn && hasValidAttackTarget(unit, enemy));
+function getValidAttackers(player: PlayerState, enemy: PlayerState, currentTurn: number): FieldSpirit[] {
+  return player.field.filter(unit => unit.canAttackThisTurn && hasValidAttackTarget(unit, enemy, currentTurn));
 }
 
 function getBestAiTarget(attacker: FieldSpirit, enemy: PlayerState): FieldSpirit | undefined {
@@ -122,6 +154,10 @@ function canManifestCard(card: CardInstance, player: PlayerState): boolean {
 
   if (def.id === 'bomb_ghost') return true;
   if (def.id === 'ritual_ghost') return player.field.filter(unit => unit.currentHp > 0).length >= 2;
+  if (def.id === 'oathbreaker_ghost') {
+    const ownerIdx = (player.id - 1) as 0 | 1;
+    return player.field.length < FIELD_LIMIT || player.field.some(unit => unit.originalOwner === ownerIdx && !unit.keywords.includes('token'));
+  }
 
   return player.field.length < FIELD_LIMIT;
 }
@@ -140,6 +176,19 @@ function getBestAiManifestCard(player: PlayerState, enemy: PlayerState): CardIns
         return -50;
       }
       if (def.id === 'ritual_ghost') return player.field.length >= 2 ? 80 : -50;
+      if (def.id === 'oathbreaker_ghost') {
+        const ownerIdx = (player.id - 1) as 0 | 1;
+        const enemyBound = enemy.field.filter(unit => unit.originalOwner === ownerIdx && !unit.keywords.includes('token'));
+        if (enemyBound.length > 0) return 95;
+        if (player.field.some(unit => unit.originalOwner === ownerIdx && unit.atk >= 2)) return 55;
+        return -30;
+      }
+      if (def.id === 'possessor_ghost') {
+        const ownerIdx = (player.id - 1) as 0 | 1;
+        const reclaimable = enemy.field.some(unit => unit.originalOwner === ownerIdx && unit.currentHp < unit.maxHp && !unit.keywords.includes('token'));
+        return reclaimable && player.field.length <= FIELD_LIMIT - 2 ? 90 : 5;
+      }
+      if (def.id === 'grave_caller') return 35;
       if (def.id === 'sword_ghost' && enemy.field.some(unit => unit.maxHp >= 5)) return 70;
       return def.cost * 10 + def.atk + def.hp;
     };
@@ -810,7 +859,13 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       addLog('⚠️ Ritual Ghost requires 2 friendly spirits to sacrifice.', 'system');
       return;
     }
-    if (active.field.length >= FIELD_LIMIT && def.id !== 'bomb_ghost' && def.id !== 'ritual_ghost') {
+    const boundGhostsForManifest = getBoundGhostsOnEitherField(players, currentPlayer);
+    const oathCanMakeRoom = def.id === 'oathbreaker_ghost' && boundGhostsForManifest.some(target => target.controllerIdx === currentPlayer);
+    if (def.id === 'oathbreaker_ghost' && boundGhostsForManifest.length === 0) {
+      addLog('⚠️ Oathbreaker Ghost needs a ghost Bound to you on either field.', 'system');
+      return;
+    }
+    if (active.field.length >= FIELD_LIMIT && def.id !== 'bomb_ghost' && def.id !== 'ritual_ghost' && !oathCanMakeRoom) {
       addLog(`⚠️ Field is full (${FIELD_LIMIT}/${FIELD_LIMIT}). Cannot Manifest another spirit.`, 'system');
       return;
     }
@@ -848,8 +903,54 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         });
       }
 
+      if (def.id === 'oathbreaker_ghost') {
+        const enemyIdx = currentPlayer === 0 ? 1 : 0;
+        const targets = sortClaimTargets(getBoundGhostsOnEitherField(copy, currentPlayer), enemyIdx);
+        const sacrifice = targets[0];
+        if (sacrifice) {
+          const sacrificedName = BASE_CARDS[sacrifice.unit.cardId].name;
+          const damage = Math.max(1, sacrifice.unit.atk);
+          copy[sacrifice.controllerIdx].field = copy[sacrifice.controllerIdx].field.filter(unit => unit.instanceId !== sacrifice.unit.instanceId);
+          copy[enemyIdx].leaderHp -= damage;
+          setDiscardPile(dp => [...dp, { instanceId: sacrifice.unit.instanceId, cardId: sacrifice.unit.cardId, originalOwner: sacrifice.unit.originalOwner }]);
+          addLog(`🪦 Oathbreaker sacrifices ${sacrificedName} Bound to ${player.name} from ${copy[sacrifice.controllerIdx].name}'s field.`, 'effect');
+          addLog(`💔 ${sacrificedName}'s broken oath deals ${damage} damage to ${copy[enemyIdx].name}'s Leader!`, 'attack');
+        }
+      }
+
       const newUnit = makeSpirit(instance, turnCount, currentPlayer);
       player.field = [...player.field, newUnit];
+
+      if (def.id === 'possessor_ghost') {
+        const enemyIdx = currentPlayer === 0 ? 1 : 0;
+        const reclaimTarget = copy[enemyIdx].field
+          .filter(unit => unit.currentHp > 0 && unit.currentHp < unit.maxHp && unit.originalOwner === currentPlayer && !unit.keywords.includes('token'))
+          .sort((a, b) => (BASE_CARDS[b.cardId].cost - BASE_CARDS[a.cardId].cost) || b.atk - a.atk)[0];
+        if (reclaimTarget && player.field.length < FIELD_LIMIT) {
+          copy[enemyIdx].field = copy[enemyIdx].field.filter(unit => unit.instanceId !== reclaimTarget.instanceId);
+          player.field = [...player.field, { ...reclaimTarget, canAttackThisTurn: false, summonedTurn: turnCount }];
+          addLog(`👻 Possessor Ghost reclaims ${BASE_CARDS[reclaimTarget.cardId].name} from ${copy[enemyIdx].name}'s field because it is Bound to ${player.name}.`, 'effect');
+        } else if (reclaimTarget) {
+          addLog('⚠️ Possessor Ghost found a Bound target, but your field has no room to reclaim it.', 'system');
+        } else {
+          addLog('👻 Possessor Ghost found no damaged enemy-controlled ghost Bound to you.', 'effect');
+        }
+      }
+
+      if (def.id === 'grave_caller') {
+        const recalled = [...discardPile]
+          .filter(card => card.originalOwner === currentPlayer && !BASE_CARDS[card.cardId].token)
+          .sort((a, b) => BASE_CARDS[b.cardId].cost - BASE_CARDS[a.cardId].cost)[0];
+        if (recalled && player.hand.length < HAND_LIMIT) {
+          player.hand = [...player.hand, recalled];
+          setDiscardPile(dp => dp.filter(card => card.instanceId !== recalled.instanceId));
+          addLog(`🔔 Grave Caller returns ${BASE_CARDS[recalled.cardId].name} Bound to ${player.name} from the discard to hand.`, 'effect');
+        } else if (recalled) {
+          addLog('⚠️ Grave Caller heard a Bound ghost, but your hand is full.', 'system');
+        } else {
+          addLog('🔔 Grave Caller found no defeated ghost Bound to you.', 'effect');
+        }
+      }
 
       if (def.id === 'loud_ghost') {
         const enemyIdx = currentPlayer === 0 ? 1 : 0;
@@ -927,7 +1028,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     if (!attacker || !attacker.canAttackThisTurn) return;
 
     if (isEnemyLeader) {
-      if (!canAttackLeaderTarget(attacker, enemy)) {
+      if (!canAttackLeaderTarget(attacker, enemy, turnCount)) {
         addLog('⚠️ Cannot attack enemy Leader while opponent controls protecting spirits!', 'system');
         return;
       }
@@ -1248,7 +1349,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     if (!selectedAttackerId) return;
     const human = players[0];
     const enemy = players[1];
-    const stillValid = getValidAttackers(human, enemy).some(unit => unit.instanceId === selectedAttackerId);
+    const stillValid = getValidAttackers(human, enemy, turnCount).some(unit => unit.instanceId === selectedAttackerId);
     if (!stillValid) setSelectedAttackerId(null);
   }, [players, selectedAttackerId]);
 
@@ -1273,7 +1374,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       }
 
       if (phase === 'attack') {
-        const validAttackers = getValidAttackers(active, enemy);
+        const validAttackers = getValidAttackers(active, enemy, turnCount);
         if (validAttackers.length === 0) {
           setPhase('react');
           return;
@@ -1308,7 +1409,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           return;
         }
 
-        if (enemy.field.length === 0) {
+        if (canAttackLeaderTarget(attacker, enemy, turnCount)) {
           const hasReaction = triggerHoldReactionWindow({
             trigger: 'when_leader_damaged',
             sourcePlayerIndex: currentPlayer,
@@ -1367,8 +1468,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
   const isHumanTurn = currentPlayer === 0;
   const humanCanAct = isHumanTurn && !winner && !autoplay;
   const selectedAttacker = humanPlayer.field.find(unit => unit.instanceId === selectedAttackerId);
-  const canAttackEnemyLeader = !!selectedAttacker && canAttackLeaderTarget(selectedAttacker, computerPlayer);
-  const humanValidAttackers = getValidAttackers(humanPlayer, computerPlayer);
+  const canAttackEnemyLeader = !!selectedAttacker && canAttackLeaderTarget(selectedAttacker, computerPlayer, turnCount);
+  const humanValidAttackers = getValidAttackers(humanPlayer, computerPlayer, turnCount);
 
   const isCardUsableReaction = (card: CardInstance) => {
     if (!reactionContext) return false;
@@ -1480,6 +1581,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
                     isEmpty={!unit}
                     isTargetable={canBeTargeted}
                     onClick={() => canBeTargeted && handleTargetClick(unit)}
+                    ownershipLabel={unit ? getOwnershipLabel(unit.originalOwner, 0, 1) : undefined}
                     className={unitCardClass}
                   />
                 );
@@ -1514,7 +1616,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
               {[0, 1, 2, 3].map(slotIdx => {
                 const unit = humanPlayer.field[slotIdx];
                 const isChoosingSwordTarget = !!(pendingTargetHoldCard && BASE_CARDS[pendingTargetHoldCard.cardId]?.id === 'sword_ghost');
-                const isEligibleAttacker = !!(humanCanAct && !isChoosingSwordTarget && phase === 'attack' && unit && getValidAttackers(humanPlayer, computerPlayer).some(attacker => attacker.instanceId === unit.instanceId));
+                const isEligibleAttacker = !!(humanCanAct && !isChoosingSwordTarget && phase === 'attack' && unit && getValidAttackers(humanPlayer, computerPlayer, turnCount).some(attacker => attacker.instanceId === unit.instanceId));
                 const isHoldTarget = !!(humanCanAct && phase === 'react' && isChoosingSwordTarget && unit && unit.currentHp > 0 && !unit.keywords.includes('cat'));
 
                 return (
@@ -1541,6 +1643,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
                         setSelectedAttackerId(unit.instanceId);
                       }
                     }}
+                    ownershipLabel={unit ? getOwnershipLabel(unit.originalOwner, 0, 0) : undefined}
                     className={unitCardClass}
                   />
                 );
@@ -1722,7 +1825,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
               let disabledReason: string | undefined;
               if (phase !== 'main' && !isReactionWindow && !usableInAttackTrick) disabledReason = 'Can only Manifest during Main phase';
               else if (def.id === 'ritual_ghost' && humanPlayer.field.filter(unit => unit.currentHp > 0).length < 2) disabledReason = 'Needs 2 friendly sacrifices';
-              else if (humanPlayer.field.length >= FIELD_LIMIT && def.id !== 'bomb_ghost' && def.id !== 'ritual_ghost') disabledReason = `Field full (${FIELD_LIMIT}/${FIELD_LIMIT} slots)`;
+              else if (def.id === 'oathbreaker_ghost' && getBoundGhostsOnEitherField(players, 0).length === 0) disabledReason = 'Needs a ghost Bound to you on either field';
+              else if (humanPlayer.field.length >= FIELD_LIMIT && def.id !== 'bomb_ghost' && def.id !== 'ritual_ghost' && def.id !== 'oathbreaker_ghost') disabledReason = `Field full (${FIELD_LIMIT}/${FIELD_LIMIT} slots)`;
               else if (humanPlayer.currentPsy < def.cost) disabledReason = `Need ${def.cost} Psy (${humanPlayer.currentPsy}/${def.cost})`;
               else if (humanPlayer.hasManifestedThisTurn) disabledReason = 'Already Manifested 1 spirit this turn';
 
@@ -1764,6 +1868,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
                     }}
                     disabledReason={!canPlayManifest && !usableInReaction && !usableInReactPhase && !usableInAttackTrick ? disabledReason : undefined}
                     className="!w-28 !h-32 lg:!w-32 lg:!h-[8.5rem] text-[9px]"
+                    showBadge={getOwnershipLabel(cardInst.originalOwner, 0)}
                     compact
                   />
                 </div>

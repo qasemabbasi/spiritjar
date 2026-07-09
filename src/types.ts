@@ -12,7 +12,10 @@ export type Keyword =
   | 'boom'
   | 'strike'
   | 'ritual'
-  | 'fog';
+  | 'fog'
+  | 'possess'
+  | 'oath'
+  | 'caller';
 
 export type HoldTrigger = 
   | 'when_attacked' 
