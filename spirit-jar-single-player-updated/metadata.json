@@ -1,6 +1,0 @@
-{
-  "name": "Spirit Jar",
-  "description": "Cute ghost collector card battler prototype with a shared deck mechanic and tactical Hold reactions.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
