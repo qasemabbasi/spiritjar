@@ -76,6 +76,11 @@ export function FieldUnitView({
               TAUNT
             </span>
           )}
+          {spirit.scared && (
+            <span className="px-1.5 py-0.5 bg-purple-900/80 border border-purple-400 rounded text-[8px] font-black text-purple-100">
+              SCARED
+            </span>
+          )}
           {spirit.developed && !isToken && (
             <span className="px-1.5 py-0.5 bg-violet-900/80 border border-violet-400 rounded text-[8px] font-black text-violet-100">
               DEVELOPED
@@ -144,7 +149,7 @@ export function FieldUnitView({
       <div className="pointer-events-none absolute left-1/2 bottom-full z-[70] mb-2 w-56 -translate-x-1/2 rounded-xl border border-cyan-500/60 bg-slate-950/95 p-3 text-left shadow-2xl opacity-0 scale-95 transition-all group-hover/unit:opacity-100 group-hover/unit:scale-100">
         <div className="mb-1 font-black uppercase tracking-tight text-cyan-300">{cardDef.name}</div>
         <div className="mb-2 text-[10px] text-slate-400">
-          Current: {spirit.currentHp}/{spirit.maxHp} HP • {spirit.atk} ATK{spirit.developed ? ' • DEVELOPED' : ''}{ownershipLabel ? ` • ${ownershipLabel}` : ''}
+          Current: {spirit.currentHp}/{spirit.maxHp} HP • {spirit.atk} ATK{spirit.developed ? ' • DEVELOPED' : ''}{spirit.scared ? ' • SCARED' : ''}{ownershipLabel ? ` • ${ownershipLabel}` : ''}
         </div>
         <div className="space-y-1 text-[10px] leading-tight text-slate-200">
           {cardDef.manifestText && <div><span className="font-bold text-cyan-400">MANIFEST:</span> {cardDef.manifestText}</div>}
@@ -154,6 +159,7 @@ export function FieldUnitView({
           {cardDef.hasHold && <div><span className="font-bold text-amber-400">HOLD:</span> {cardDef.holdText}</div>}
           {cardDef.boundText && <div><span className="font-bold text-cyan-300">BOUND:</span> {cardDef.boundText}</div>}
           {cardDef.borrowedText && <div><span className="font-bold text-fuchsia-300">BORROWED:</span> {cardDef.borrowedText}</div>}
+          {cardDef.developedText && <div><span className="font-bold text-violet-300">DEVELOPED:</span> {cardDef.developedText}</div>}
         </div>
       </div>
     </div>

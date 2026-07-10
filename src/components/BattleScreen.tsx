@@ -51,7 +51,9 @@ function makeSpirit(instance: CardInstance, turnCount: number, currentPlayer: 0 
     burn: 0,
     originalOwner: instance.originalOwner ?? currentPlayer,
     swordBuffedThisTurn: false,
-    developed: false
+    developed: false,
+    scared: false,
+    fogShieldUsedThisTurn: false
   };
 }
 
@@ -372,7 +374,8 @@ function CardDetailPreview({ card }: { card: CardDefinition | null }) {
         {card.hasHold && <div><span className="font-black text-amber-400">HOLD:</span> {card.holdText}</div>}
         {card.boundText && <div><span className="font-black text-cyan-300">BOUND:</span> {card.boundText}</div>}
         {card.borrowedText && <div><span className="font-black text-fuchsia-300">BORROWED:</span> {card.borrowedText}</div>}
-        {!card.manifestText && !card.fieldText && !card.attackText && !card.defeatText && !card.hasHold && !card.boundText && !card.borrowedText && (
+        {card.developedText && <div><span className="font-black text-violet-300">DEVELOPED:</span> {card.developedText}</div>}
+        {!card.manifestText && !card.fieldText && !card.attackText && !card.defeatText && !card.hasHold && !card.boundText && !card.borrowedText && !card.developedText && (
           <div className="text-slate-400">No special rules.</div>
         )}
       </div>
@@ -556,7 +559,9 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
               summonedTurn: turnCount,
               burn: 0,
               originalOwner: dead.originalOwner,
-              developed: false
+              developed: false,
+              scared: false,
+              fogShieldUsedThisTurn: false
             });
           } else if (!dead.keywords.includes('token')) {
             setDiscardPile(dp => [...dp, { instanceId: dead.instanceId, cardId: dead.cardId, originalOwner: dead.originalOwner, defeatedDeveloped: dead.developed }]);
@@ -581,9 +586,21 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     }
 
     let damage = attacker.atk;
-    if (defender.cardId === 'fog_ghost' && defender.originalOwner === defenderPlayerIdx) {
-      damage = Math.max(0, damage - 1);
-      addLog(`😱 Bound Fog scares ${atkCard.name}. Incoming damage is reduced by 1.`, 'effect');
+    if (defender.cardId === 'fog_ghost' && defender.originalOwner === defenderPlayerIdx && !defender.fogShieldUsedThisTurn) {
+      damage = 0;
+      addLog(`🌫️ ${atkCard.name} passes through Bound Fog and gets scared. The attack deals 0 damage.`, 'effect');
+      setPlayers(prev => {
+        const copy = clonePlayers(prev);
+        copy[attackerPlayerIdx].field = copy[attackerPlayerIdx].field.map(unit => {
+          if (unit.instanceId !== attacker.instanceId) return unit;
+          return { ...unit, scared: true };
+        });
+        copy[defenderPlayerIdx].field = copy[defenderPlayerIdx].field.map(unit => {
+          if (unit.instanceId !== defender.instanceId) return unit;
+          return { ...unit, fogShieldUsedThisTurn: true };
+        });
+        return copy;
+      });
     }
 
     sounds.playAttack();
@@ -601,6 +618,13 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       setPlayers(prev => {
         const copy = clonePlayers(prev);
         copy[defenderPlayerIdx].leaderHp -= 1;
+        if (attacker.developed) {
+          const scareTarget = copy[defenderPlayerIdx].field.find(unit => unit.instanceId !== defender.instanceId && unit.currentHp > 0 && !unit.keywords.includes('token'));
+          if (scareTarget) {
+            scareTarget.scared = true;
+            addLog(`😱 Developed Spear scares ${BASE_CARDS[scareTarget.cardId].name}!`, 'effect');
+          }
+        }
         return copy;
       });
     }
@@ -629,6 +653,18 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         if (unit.instanceId === defender.instanceId) return;
         applyDamageToSpirit(defenderPlayerIdx, unit.instanceId, 1, undefined, true);
       });
+      if (attacker.cardId === 'loud_ghost' && attacker.developed) {
+        addLog('😱 Developed Loud scares damaged enemy spirits with the echo.', 'effect');
+        setPlayers(prev => {
+          const copy = clonePlayers(prev);
+          copy[defenderPlayerIdx].field = copy[defenderPlayerIdx].field.map(unit => {
+            if (unit.keywords.includes('token')) return unit;
+            if (unit.instanceId === defender.instanceId || unit.currentHp < unit.maxHp) return { ...unit, scared: true };
+            return unit;
+          });
+          return copy;
+        });
+      }
     }
   }, [addLog, applyDamageToSpirit, players]);
 
@@ -802,7 +838,9 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
             canAttackThisTurn: false,
             summonedTurn: turnCount,
             burn: 0,
-            developed: false
+            developed: false,
+            scared: false,
+            fogShieldUsedThisTurn: false
           };
         }
         return unit;
@@ -817,8 +855,10 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           ...unit,
           atk: baseAtk,
           swordBuffedThisTurn: false,
+          fogShieldUsedThisTurn: false,
           developed: unit.developed || isExistingNonToken,
-          canAttackThisTurn: isExistingNonToken && baseAtk > 0
+          canAttackThisTurn: isExistingNonToken && baseAtk > 0 && !unit.scared,
+          scared: false
         };
       });
 
@@ -852,7 +892,9 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           summonedTurn: turnCount,
           burn: 0,
           originalOwner: lantern.originalOwner,
-          developed: false
+          developed: false,
+          scared: false,
+          fogShieldUsedThisTurn: false
         });
       }
 
@@ -945,7 +987,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         copy.forEach((boardPlayer, boardIdx) => {
           boardPlayer.field = boardPlayer.field.map(unit => {
             const protectedByBoundBomb = isBoundManifest && boardIdx === currentPlayer && unit.originalOwner === currentPlayer;
-            return { ...unit, currentHp: unit.currentHp - (protectedByBoundBomb ? 3 : 4) };
+            return { ...unit, currentHp: unit.currentHp - (protectedByBoundBomb ? 3 : 4), scared: true };
           });
           boardPlayer.leaderHp -= leaderDamage;
         });
@@ -994,13 +1036,14 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           const sacrificedName = BASE_CARDS[sacrifice.unit.cardId].name;
           const fromEnemyField = sacrifice.controllerIdx === enemyIdx;
           const wasDeveloped = !!sacrifice.unit.developed;
-          const developedBonus = wasDeveloped ? 1 : 0;
-          const damage = Math.max(1, sacrifice.unit.atk) + developedBonus + (fromEnemyField ? 1 : 0);
+          const baseOathDamage = Math.max(1, sacrifice.unit.atk);
+          const developedBonus = wasDeveloped ? baseOathDamage : 0;
+          const damage = baseOathDamage + developedBonus + (fromEnemyField ? 1 : 0);
           copy[sacrifice.controllerIdx].field = copy[sacrifice.controllerIdx].field.filter(unit => unit.instanceId !== sacrifice.unit.instanceId);
           copy[enemyIdx].leaderHp -= damage;
           setDiscardPile(dp => [...dp, { instanceId: sacrifice.unit.instanceId, cardId: sacrifice.unit.cardId, originalOwner: sacrifice.unit.originalOwner, defeatedDeveloped: sacrifice.unit.developed }]);
           addLog(`🪦 Oathbreaker sacrifices ${sacrificedName} Bound to ${player.name} from ${copy[sacrifice.controllerIdx].name}'s field.`, 'effect');
-          if (wasDeveloped) addLog('🌙 The Developed bond adds +1 damage!', 'effect');
+          if (wasDeveloped) addLog('🌙 The Developed bond doubles the broken-oath damage!', 'effect');
           if (fromEnemyField) addLog('🔗 The stolen bond snaps back for +1 damage!', 'effect');
           addLog(`💔 ${sacrificedName}'s broken oath deals ${damage} damage to ${copy[enemyIdx].name}'s Leader!`, 'attack');
 
@@ -1072,13 +1115,17 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         const recalled = [...discardPile]
           .filter(card => card.originalOwner === currentPlayer && card.cardId !== 'bomb_ghost' && !BASE_CARDS[card.cardId].token)
           .sort((a, b) => BASE_CARDS[b.cardId].cost - BASE_CARDS[a.cardId].cost)[0];
-        if (recalled && player.hand.length < HAND_LIMIT) {
-          player.hand = [...player.hand, recalled];
+        if (recalled && (player.hand.length < HAND_LIMIT || (recalled.defeatedDeveloped && player.field.length < FIELD_LIMIT))) {
           setDiscardPile(dp => dp.filter(card => card.instanceId !== recalled.instanceId));
-          addLog(`🔔 Grave Caller returns ${BASE_CARDS[recalled.cardId].name} Bound to ${player.name} from the discard to hand.`, 'effect');
-          if (recalled.defeatedDeveloped) {
-            player.currentPsy = Math.min(player.maxPsy, player.currentPsy + 1);
-            addLog(`🌙 Developed ${BASE_CARDS[recalled.cardId].name}'s echo refunds 1 Psy.`, 'effect');
+          if (recalled.defeatedDeveloped && player.field.length < FIELD_LIMIT) {
+            const called = makeSpirit(recalled, turnCount, currentPlayer);
+            called.canAttackThisTurn = false;
+            called.developed = false;
+            player.field = [...player.field, called];
+            addLog(`🔔 Grave Caller drags Developed ${BASE_CARDS[recalled.cardId].name} straight back onto the field exhausted.`, 'effect');
+          } else {
+            player.hand = [...player.hand, recalled];
+            addLog(`🔔 Grave Caller returns ${BASE_CARDS[recalled.cardId].name} Bound to ${player.name} from the discard to hand.`, 'effect');
           }
           if (!isBoundManifest) {
             copy[instance.originalOwner].bonusPsyNextTurn = (copy[instance.originalOwner].bonusPsyNextTurn || 0) + 1;
@@ -1110,7 +1157,9 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           summonedTurn: turnCount,
           burn: 0,
           originalOwner: instance.originalOwner,
-          developed: false
+          developed: false,
+          scared: false,
+          fogShieldUsedThisTurn: false
         });
       }
 
@@ -1419,7 +1468,9 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
             summonedTurn: turnCount,
             burn: 0,
             originalOwner: cardInst.originalOwner,
-            developed: false
+            developed: false,
+            scared: false,
+            fogShieldUsedThisTurn: false
           });
         }
         return copy;
@@ -1472,7 +1523,9 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
             summonedTurn: turnCount,
             burn: 0,
             originalOwner: cardInst.originalOwner,
-            developed: false
+            developed: false,
+            scared: false,
+            fogShieldUsedThisTurn: false
           });
         }
         return copy;

@@ -102,6 +102,11 @@ const KEYWORD_INFO: Record<Keyword, { label: string; color: string; desc: string
     color: 'bg-slate-500/20 text-slate-200 border-slate-300/40',
     desc: 'Scares spirits, lowering or disrupting their attack.'
   },
+  scared: {
+    label: 'SCARED',
+    color: 'bg-purple-500/20 text-purple-200 border-purple-300/40',
+    desc: 'This spirit cannot attack during its next attack phase.'
+  },
   pierce: {
     label: 'PIERCE',
     color: 'bg-orange-500/20 text-orange-200 border-orange-300/40',

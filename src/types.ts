@@ -18,6 +18,7 @@ export type Keyword =
   | 'caller'
   | 'swap'
   | 'fear'
+  | 'scared'
   | 'pierce';
 
 export type HoldTrigger = 
@@ -51,6 +52,7 @@ export interface CardDefinition {
   role?: string;
   boundText?: string;
   borrowedText?: string;
+  developedText?: string;
   artKey: string;
   themeColor: string;
 }
@@ -75,6 +77,8 @@ export interface FieldSpirit {
   originalOwner: number;
   swordBuffedThisTurn?: boolean;
   developed: boolean;
+  scared: boolean;
+  fogShieldUsedThisTurn?: boolean;
 }
 
 
