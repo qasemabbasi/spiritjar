@@ -1,6 +1,6 @@
 # Spirit Jar
 
-Spirit Jar is a single-player prototype card battler: **Player 1 vs Spirit Lord AI**. Each player brings a Leader and a 10-card ghost deck. Both decks shuffle into one shared Draw Jar. You can use whatever ghost you draw, but every ghost remembers who originally bound it. The match is a contest to prove who can command the whole Spirit Jar.
+Spirit Jar is a single-player prototype card battler: **Player 1 vs Spirit Lord AI**. Each player brings a Leader and a 12-card ghost deck. Both decks shuffle into one shared Draw Jar. You can use whatever ghost you draw, but every ghost remembers who originally bound it. The match is a contest to prove who can command the whole Spirit Jar.
 
 ## Current design direction
 
@@ -15,7 +15,7 @@ Minimal monster battler, but with ridiculous ghost swings:
 ## Core rules
 
 - Each player has a Leader with 10 HP. Reduce the enemy Leader to 0 to shatter their Spirit Jar.
-- Each player brings a separate 10-card deck. The player deck and AI deck shuffle together into one Draw Jar.
+- Each player brings a separate 12-card deck. The player deck and AI deck shuffle together into one Draw Jar.
 - **Bound** cards are ghosts you brought. **Borrowed** cards are ghosts the opponent brought but you are using.
 - Control can change, but claim stays: a ghost on the opponent field may still be Bound to you.
 - Draw 1 card per turn. Maximum hand size is 5.
@@ -35,10 +35,10 @@ Minimal monster battler, but with ridiculous ghost swings:
 - Spear Ghost: clean 2-cost attacker. Bound Spear pierces 1 Leader damage through defeated non-token spirits. Developed Spear scares another enemy after a kill.
 - Lantern Ghost: Wisp generator. Bound Lantern creates ready Wisps. Borrowed Lantern creates Wisps still Bound to the original binder. Developed Lantern keeps feeding the board.
 - Loud Ghost: board chip and splash. Bound Loud passes damage through kills. Developed Loud scares damaged enemies after splash.
-- Bones Ghost: cheap 2-cost recursion fuel with lower HP.
+- Bones Ghost: cheap 2-cost recursion fuel with lower HP. Developed Bones draws 1 when defeated or sacrificed; if sacrificed, it also leaves a Bone Pile.
 - Fog Ghost: cheap Taunt. The first attack against Bound Fog passes through for 0 damage and scares the attacker.
 - Possessor Ghost: Bound mode reclaims damaged Bound ghosts. Borrowed mode swaps places with a damaged enemy ghost.
-- Oathbreaker Ghost: sacrifices a ghost Bound to you from either field. Developed sacrifices double the sacrificed ghost’s ATK for broken-oath damage, and enemy-field sacrifices add +1 more.
+- Oathbreaker Ghost: sacrifices a ghost Bound to you from either field. Developed sacrifices add +2 broken-oath damage, and enemy-field sacrifices add +1 more. It no longer draws by itself; Bones carries the sacrifice payoff.
 - Grave Caller: calls back defeated non-Bomb Bound ghosts. If the recalled ghost died Developed and there is field space, it manifests exhausted instead of going to hand.
 - Bomb Ghost: board reset and emergency Hold blast. Bound Bomb protects your Bound spirits by 1. Borrowed Bomb hits both Leaders harder. Survivors are scared.
 - Ritual Ghost: sacrifice payoff and revive Hold. Still experimental.

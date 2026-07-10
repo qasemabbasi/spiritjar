@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BASE_CARDS, COLLECTIBLE_CARD_IDS, getStandardPlayerCollection, getDefaultSelectedDeck, getDefaultOpponentDeck } from '../data/cards';
+import { BASE_CARDS, COLLECTIBLE_CARD_IDS, DECK_SIZE, getStandardPlayerCollection, getDefaultSelectedDeck, getDefaultOpponentDeck } from '../data/cards';
 import { CardDefinition } from '../types';
 import { CardView } from './CardView';
 import { sounds } from '../utils/audio';
@@ -12,7 +12,7 @@ function SetupCardDetail({ card }: { card: CardDefinition | null }) {
   if (!card) {
     return (
       <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4 text-xs leading-relaxed text-slate-500 font-mono">
-        Hover or focus a card to read its full rules before adding it to your 10-card deck.
+        Hover or focus a card to read its full rules before adding it to your deck.
       </div>
     );
   }
@@ -63,7 +63,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
     const maxAllowed = p1Collection.filter(id => id === cardId).length;
     const currentCount = p1Selected.filter(id => id === cardId).length;
 
-    if (p1Selected.length < 10 && currentCount < maxAllowed) {
+    if (p1Selected.length < DECK_SIZE && currentCount < maxAllowed) {
       setP1Selected([...p1Selected, cardId]);
     }
   };
@@ -113,16 +113,16 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
 
           <div className="text-right">
             <span className="text-xs text-slate-400 uppercase tracking-widest block">Selected Ghosts</span>
-            <span className={`text-3xl font-black ${p1Selected.length === 10 ? 'text-cyan-400' : 'text-amber-400'}`}>
-              {p1Selected.length < 10 ? `0${p1Selected.length}` : p1Selected.length} <span className="text-lg opacity-50">/ 10</span>
+            <span className={`text-3xl font-black ${p1Selected.length === DECK_SIZE ? 'text-cyan-400' : 'text-amber-400'}`}>
+              {p1Selected.length < DECK_SIZE ? `0${p1Selected.length}` : p1Selected.length} <span className="text-lg opacity-50">/ {DECK_SIZE}</span>
             </span>
           </div>
 
           <button
             onClick={() => startBattle(p1Selected)}
-            disabled={p1Selected.length !== 10}
+            disabled={p1Selected.length !== DECK_SIZE}
             className={`px-6 py-3 rounded-xl font-black text-sm tracking-wider uppercase transition-all shadow-lg ${
-              p1Selected.length === 10
+              p1Selected.length === DECK_SIZE
                 ? 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 cursor-pointer shadow-[0_0_20px_rgba(6,182,212,0.5)]'
                 : 'bg-slate-800 text-slate-500 cursor-not-allowed'
             }`}
@@ -140,7 +140,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
             <div>
               <h1 className="text-3xl font-black tracking-tighter text-cyan-400">SPIRIT JAR</h1>
               <h2 className="text-xs uppercase tracking-widest font-bold text-slate-400">
-                Pick 10 ghosts. The AI brings its own 10-card deck, then both decks shuffle into one Draw Jar.
+                Pick {DECK_SIZE} ghosts. The AI brings its own {DECK_SIZE}-card deck, then both decks shuffle into one Draw Jar.
               </h2>
             </div>
 
@@ -148,12 +148,17 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
               onClick={() => setP1Selected(getDefaultSelectedDeck())}
               className="text-xs text-cyan-400 hover:underline font-mono font-bold"
             >
-              [Auto-Fill Recommended 10]
+              [Auto-Fill Recommended 12]
             </button>
           </div>
 
           <div className="mb-4 rounded-2xl border border-cyan-500/30 bg-slate-950/70 p-3 shadow-[0_0_24px_rgba(34,211,238,0.12)]">
             <div className="mb-2 text-[10px] font-black uppercase tracking-widest text-cyan-400">Full card details</div>
+            <div className="mb-3 rounded-xl border border-fuchsia-500/30 bg-fuchsia-950/20 p-2 text-[10px] leading-snug text-slate-300">
+              <span className="font-black text-cyan-300">BOUND</span> means you brought that ghost into the match.
+              <span className="font-black text-fuchsia-300"> BORROWED</span> means your opponent brought it, but you are using it. Control can change; the bond stays.
+              <span className="font-black text-violet-300"> DEVELOPED</span> means a ghost survived to its controller's next turn and its bigger payoff is online.
+            </div>
             <SetupCardDetail card={previewCard} />
           </div>
 
@@ -161,7 +166,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
             {uniqueCards.map(card => {
               const totalOwned = p1Collection.filter(id => id === card.id).length;
               const currentlyPicked = p1Selected.filter(id => id === card.id).length;
-              const canPickMore = currentlyPicked < totalOwned && p1Selected.length < 10;
+              const canPickMore = currentlyPicked < totalOwned && p1Selected.length < DECK_SIZE;
 
               return (
                 <div key={card.id} className="relative group flex flex-col items-center" onMouseEnter={() => setPreviewCardId(card.id)} onFocus={() => setPreviewCardId(card.id)}>
@@ -169,7 +174,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
                     card={card}
                     compact
                     onClick={() => canPickMore && addCard(card.id)}
-                    disabledReason={!canPickMore ? (p1Selected.length >= 10 ? 'Deck full (10/10)' : 'Max owned copies picked') : undefined}
+                    disabledReason={!canPickMore ? (p1Selected.length >= DECK_SIZE ? `Deck full (${DECK_SIZE}/${DECK_SIZE})` : 'Max owned copies picked') : undefined}
                   />
                   <div className="mt-2 flex items-center justify-between w-40 px-2 py-1 bg-indigo-950/80 rounded border border-indigo-800 text-xs font-mono">
                     <span className="text-slate-400">Picked:</span>
@@ -194,7 +199,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
         {/* Selected Deck Sidebar */}
         <div className="flex flex-col bg-[#020617] border border-slate-800 rounded-xl p-4 overflow-hidden">
           <h3 className="text-xs uppercase font-bold tracking-widest text-cyan-400 mb-3 border-b border-slate-800 pb-2">
-            Your 10-Card Deck ({p1Selected.length}/10)
+            Your {DECK_SIZE}-Card Deck ({p1Selected.length}/{DECK_SIZE})
           </h3>
 
           <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1 font-mono text-xs">

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { CardDefinition, CardInstance, FieldSpirit, PlayerState, TurnPhase, GameLogEntry, ReactionContext } from '../types';
-import { BASE_CARDS } from '../data/cards';
+import { BASE_CARDS, DECK_SIZE } from '../data/cards';
 import { CardView } from './CardView';
 import { FieldUnitView } from './FieldUnitView';
 import { sounds } from '../utils/audio';
@@ -548,6 +548,16 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
 
           if (dead.cardId === 'bones_ghost') {
             addLog('🦴 Bones Ghost leaves behind a Bone Pile token!', 'effect');
+            if (dead.developed) {
+              addLog(`🦴 Developed Bones cracks open into a stronger echo. ${player.name} draws 1 card.`, 'effect');
+              const currentDeck = [...sharedDeck];
+              if (currentDeck.length > 0 && player.hand.length < HAND_LIMIT) {
+                const drawn = currentDeck[0];
+                player.hand = [...player.hand, drawn];
+                setSharedDeck(currentDeck.slice(1));
+                addLog(`🃏 ${player.name} drew ${BASE_CARDS[drawn.cardId].name} from Bones' echo.`, 'turn');
+              }
+            }
             remainingField.push({
               instanceId: `token_bone_${Math.random().toString(36).slice(2, 8)}`,
               cardId: 'bone_pile_token',
@@ -573,7 +583,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
 
       return changed ? newPlayers : prev;
     });
-  }, [addLog, turnCount]);
+  }, [addLog, sharedDeck, turnCount]);
 
   const executeAttackDamage = useCallback((attacker: FieldSpirit, defender: FieldSpirit, attackerPlayerIdx: 0 | 1) => {
     const defenderPlayerIdx = attackerPlayerIdx === 0 ? 1 : 0;
@@ -725,7 +735,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       { ...prev[1], hand: p2Hand }
     ]);
 
-    addLog('⚔️ Battle Started! Your 10-card deck and the Spirit Lord AI deck were shuffled together into one Draw Jar.', 'system');
+    addLog(`⚔️ Battle Started! Your ${DECK_SIZE}-card deck and the Spirit Lord AI deck were shuffled together into one Draw Jar.`, 'system');
     addLog('Player 1 begins Turn 1.', 'turn');
   }, [p1Selected, p2Selected, addLog]);
 
@@ -1004,6 +1014,39 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           if (!unit.keywords.includes('token')) {
             setDiscardPile(dp => [...dp, { instanceId: unit.instanceId, cardId: unit.cardId, originalOwner: unit.originalOwner, defeatedDeveloped: unit.developed }]);
           }
+          if (unit.cardId === 'bones_ghost' && unit.developed) {
+            addLog(`🦴 Developed Bones turns the ritual sacrifice into a stronger echo. ${player.name} draws 1 card.`, 'effect');
+            if (player.field.length < FIELD_LIMIT) {
+              player.field.push({
+                instanceId: `token_bone_${Math.random().toString(36).slice(2, 8)}`,
+                cardId: 'bone_pile_token',
+                currentHp: 1,
+                maxHp: 1,
+                atk: 0,
+                keywords: ['token', 'regen'],
+                canAttackThisTurn: false,
+                summonedTurn: turnCount,
+                burn: 0,
+                originalOwner: unit.originalOwner,
+                developed: false,
+                scared: false,
+                fogShieldUsedThisTurn: false
+              });
+              addLog('🦴 Developed Bones leaves a Bone Pile after the sacrifice.', 'effect');
+            }
+            let currentDeck = [...sharedDeck];
+            let currentDiscard = [...discardPile];
+            const reshuffled = checkReshuffle(currentDeck, currentDiscard);
+            currentDeck = reshuffled.newDeck;
+            currentDiscard = reshuffled.newDiscard;
+            setDiscardPile(currentDiscard);
+            if (currentDeck.length > 0 && player.hand.length < HAND_LIMIT) {
+              const drawn = currentDeck[0];
+              player.hand = [...player.hand, drawn];
+              setSharedDeck(currentDeck.slice(1));
+              addLog(`🃏 ${player.name} drew ${BASE_CARDS[drawn.cardId].name} from Bones' echo.`, 'turn');
+            }
+          }
         });
 
         const sacrificedDeveloped = sacrifices.some(unit => unit.developed && !unit.keywords.includes('token'));
@@ -1037,13 +1080,13 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           const fromEnemyField = sacrifice.controllerIdx === enemyIdx;
           const wasDeveloped = !!sacrifice.unit.developed;
           const baseOathDamage = Math.max(1, sacrifice.unit.atk);
-          const developedBonus = wasDeveloped ? baseOathDamage : 0;
+          const developedBonus = wasDeveloped ? 2 : 0;
           const damage = baseOathDamage + developedBonus + (fromEnemyField ? 1 : 0);
           copy[sacrifice.controllerIdx].field = copy[sacrifice.controllerIdx].field.filter(unit => unit.instanceId !== sacrifice.unit.instanceId);
           copy[enemyIdx].leaderHp -= damage;
           setDiscardPile(dp => [...dp, { instanceId: sacrifice.unit.instanceId, cardId: sacrifice.unit.cardId, originalOwner: sacrifice.unit.originalOwner, defeatedDeveloped: sacrifice.unit.developed }]);
           addLog(`🪦 Oathbreaker sacrifices ${sacrificedName} Bound to ${player.name} from ${copy[sacrifice.controllerIdx].name}'s field.`, 'effect');
-          if (wasDeveloped) addLog('🌙 The Developed bond doubles the broken-oath damage!', 'effect');
+          if (wasDeveloped) addLog('🌙 The Developed bond adds +2 broken-oath damage!', 'effect');
           if (fromEnemyField) addLog('🔗 The stolen bond snaps back for +1 damage!', 'effect');
           addLog(`💔 ${sacrificedName}'s broken oath deals ${damage} damage to ${copy[enemyIdx].name}'s Leader!`, 'attack');
 
@@ -1052,8 +1095,26 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
             addLog(`🔗 Borrowed Oathbreaker demands payment. ${copy[instance.originalOwner].name} steals +1 bonus Psy next turn.`, 'effect');
           }
 
-          if (wasDeveloped) {
-            addLog(`🌙 Developed ${sacrificedName} leaves a stronger echo. ${player.name} draws 1 card.`, 'effect');
+          if (sacrifice.unit.cardId === 'bones_ghost' && wasDeveloped) {
+            addLog(`🦴 Developed Bones turns the sacrifice into a stronger echo. ${player.name} draws 1 card.`, 'effect');
+            if (copy[sacrifice.controllerIdx].field.length < FIELD_LIMIT) {
+              copy[sacrifice.controllerIdx].field.push({
+                instanceId: `token_bone_${Math.random().toString(36).slice(2, 8)}`,
+                cardId: 'bone_pile_token',
+                currentHp: 1,
+                maxHp: 1,
+                atk: 0,
+                keywords: ['token', 'regen'],
+                canAttackThisTurn: false,
+                summonedTurn: turnCount,
+                burn: 0,
+                originalOwner: sacrifice.unit.originalOwner,
+                developed: false,
+                scared: false,
+                fogShieldUsedThisTurn: false
+              });
+              addLog('🦴 Developed Bones leaves a Bone Pile after the sacrifice.', 'effect');
+            }
             let currentDeck = [...sharedDeck];
             let currentDiscard = [...discardPile];
             const reshuffled = checkReshuffle(currentDeck, currentDiscard);
@@ -1064,7 +1125,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
               const drawn = currentDeck[0];
               player.hand = [...player.hand, drawn];
               setSharedDeck(currentDeck.slice(1));
-              addLog(`🃏 ${player.name} drew ${BASE_CARDS[drawn.cardId].name} from the broken oath.`, 'turn');
+              addLog(`🃏 ${player.name} drew ${BASE_CARDS[drawn.cardId].name} from Bones' echo.`, 'turn');
             }
           }
         }
@@ -1886,7 +1947,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
             </button>
 
             <div className="rounded-lg border border-indigo-800/70 bg-indigo-950/30 px-2 py-1.5 text-[9px] font-mono leading-snug text-slate-400">
-              <span className="font-black text-cyan-300">Draw Jar:</span> your 10-card deck + the AI Spirit Lord deck, shuffled together.
+              <span className="font-black text-cyan-300">Draw Jar:</span> your {DECK_SIZE}-card deck + the AI Spirit Lord deck, shuffled together.
             </div>
 
             {selectedAttacker && !reactionContext && (

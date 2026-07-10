@@ -37,7 +37,7 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
     role: 'Fragile 1-cost pressure that speeds up early turns.',
     boundText: 'When this hits the enemy Leader, steal 1 current Psy if they have any.',
     borrowedText: "If this hits the Leader, the ghost\'s original binder gains +1 bonus Psy next turn.",
-    developedText: 'If Oathbreaker sacrifices this after it Developed, Bite deals +2 extra broken-oath damage.',
+    developedText: 'If sacrificed or defeated after it Developed, its stronger echo can create extra payoff.',
     artKey: 'bite_ghost',
     themeColor: 'from-rose-500/20 to-red-700/30 border-rose-300/50'
   },
@@ -199,6 +199,7 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
     role: 'Cheaper, fragile recursion fuel.',
     boundText: 'Its Bone Pile stays Bound to you, even if Bones was borrowed on the enemy field.',
     borrowedText: 'Still revives for whoever controls the Bone Pile, but the bond remains stealable.',
+    developedText: 'When Developed Bones is defeated or sacrificed, draw 1. If sacrificed, it also leaves a Bone Pile.',
     artKey: 'bones_ghost',
     themeColor: 'from-slate-400/20 to-zinc-600/30 border-slate-300/50'
   },
@@ -230,7 +231,7 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
     hp: 4,
     atk: 3,
     keywords: ['oath'],
-    manifestText: 'Sacrifice a ghost Bound to you from either side. Deal its ATK to the enemy Leader. Developed sacrifices hit much harder. Enemy-field sacrifices snap back for +1 damage.',
+    manifestText: 'Sacrifice a ghost Bound to you from either side. Deal its ATK to the enemy Leader. Developed sacrifices add +2. Enemy-field sacrifices snap back for +1 damage.',
     fieldText: 'Best when the opponent is relying on a ghost you brought.',
     attackText: '',
     defeatText: '',
@@ -238,7 +239,7 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
     hasHold: false,
     token: false,
     role: 'Turns your claim on a ghost into a Leader-damage swing.',
-    boundText: "Developed sacrifices double the ghost's ATK for broken-oath damage. Enemy-field sacrifices add +1 more damage.",
+    boundText: "Developed sacrifices add +2 broken-oath damage. Enemy-field sacrifices add +1 more damage. Oathbreaker does not draw by itself.",
     borrowedText: 'Still works, but after the oath breaks the original binder steals 1 Psy next turn.',
     developedText: 'A Developed Oathbreaker is still just a body, but it becomes excellent sacrifice fuel for another Oathbreaker.',
     artKey: 'oathbreaker_ghost',
@@ -258,7 +259,7 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
     holdText: '',
     hasHold: false,
     token: false,
-    role: 'Reclaims your defeated ghosts and refunds Psy from Developed echoes.',
+    role: 'Reclaims your defeated ghosts; Developed targets can come straight back to the field.',
     boundText: 'Calling back a Developed ghost Manifests it exhausted if you have field space.',
     borrowedText: 'The original binder gains +1 bonus Psy next turn after you call a ghost back.',
     developedText: 'If Grave Caller itself Develops, it becomes useful sacrifice fuel, but its call happens on Manifest.',
@@ -389,6 +390,8 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
   }
 };
 
+export const DECK_SIZE = 12;
+
 export const COLLECTIBLE_CARD_IDS = [
   'bite_ghost',
   'spear_ghost',
@@ -419,7 +422,9 @@ export function getDefaultSelectedDeck(): string[] {
     'possessor_ghost',
     'oathbreaker_ghost',
     'grave_caller',
-    'bomb_ghost'
+    'bomb_ghost',
+    'fat_ghost',
+    'ritual_ghost'
   ];
 }
 
@@ -434,6 +439,8 @@ export function getDefaultOpponentDeck(): string[] {
     'possessor_ghost',
     'oathbreaker_ghost',
     'grave_caller',
-    'bomb_ghost'
+    'bomb_ghost',
+    'fat_ghost',
+    'ritual_ghost'
   ];
 }
