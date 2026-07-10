@@ -32,7 +32,8 @@ export type HoldTrigger =
   | 'before_damage' 
   | 'after_damage'
   | 'react_phase'
-  | 'when_friendly_attacks';
+  | 'when_friendly_attacks'
+  | 'when_opponent_sacrifices_bound';
 
 export interface CardDefinition {
   id: string;
@@ -80,6 +81,9 @@ export interface FieldSpirit {
   developed: boolean;
   scared: boolean;
   fogShieldUsedThisTurn?: boolean;
+  temporaryReturnController?: 0 | 1;
+  cannotAttackLeaderUntilReturn?: boolean;
+  tankSurvivalUsedThisTurn?: boolean;
 }
 
 
@@ -114,6 +118,7 @@ export interface ReactionContext {
   sourcePlayerIndex: number; // Player initiating action
   targetPlayerIndex: number; // Player who can react
   sourceSpiritInstanceId?: string;
+  sourceCardId?: string;
   targetSpiritInstanceId?: string;
   incomingDamage?: number;
   isTokenSummon?: boolean;

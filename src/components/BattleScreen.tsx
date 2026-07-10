@@ -53,7 +53,8 @@ function makeSpirit(instance: CardInstance, turnCount: number, currentPlayer: 0 
     swordBuffedThisTurn: false,
     developed: false,
     scared: false,
-    fogShieldUsedThisTurn: false
+    fogShieldUsedThisTurn: false,
+    tankSurvivalUsedThisTurn: false
   };
 }
 
@@ -102,15 +103,13 @@ function hasValidUnitTarget(attacker: FieldSpirit, enemy: PlayerState, target?: 
   const enemyTaunts = enemy.field.filter(unit => unit.keywords.includes('taunt'));
   if (enemyTaunts.length > 0 && !target.keywords.includes('taunt')) return false;
 
-  // Cat Ghost cannot be targeted by non-Cat normal attacks.
-  // Board-wide, Splash, Burn, and Bomb damage can still hit Cat.
-  if (target.keywords.includes('cat') && !attacker.keywords.includes('cat')) return false;
 
   return true;
 }
 
 function canAttackLeaderTarget(attacker: FieldSpirit, enemy: PlayerState, currentTurn: number): boolean {
   if (attacker.keywords.includes('rush') && attacker.summonedTurn === currentTurn) return false;
+  if (attacker.cannotAttackLeaderUntilReturn) return false;
 
   if (enemy.field.length === 0) return true;
 
@@ -172,6 +171,9 @@ function getBestAiManifestCard(player: PlayerState, enemy: PlayerState): CardIns
   return [...playable].sort((a, b) => {
     const scoreCard = (card: CardInstance) => {
       const def = BASE_CARDS[card.cardId];
+      if (def.id === 'fat_ghost') return player.leaderHp <= 5 ? 65 : 40;
+      if (def.id === 'possessor_ghost') return 10;
+      if (def.id === 'grave_caller') return 35;
       if (def.id === 'bomb_ghost') {
         const enemyNonCats = enemy.field.filter(unit => !unit.keywords.includes('cat')).length;
         const ownNonCats = player.field.filter(unit => !unit.keywords.includes('cat')).length;
@@ -241,6 +243,23 @@ function isHoldCardLegallyUsable(card: CardInstance, ctx: ReactionContext, playe
   const sourcePlayer = players[ctx.sourcePlayerIndex];
   const attacker = getReactionAttacker(ctx, players);
 
+  if (def.id === 'fat_ghost') {
+    return ctx.trigger === 'when_leader_damaged' && reactingPlayer.field.length < FIELD_LIMIT && !!ctx.incomingDamage && ctx.incomingDamage > 0;
+  }
+
+  if (def.id === 'possessor_ghost') {
+    const sourceCardId = ctx.sourceCardId ?? sourcePlayer.field.find(unit => unit.instanceId === ctx.sourceSpiritInstanceId)?.cardId;
+    return ctx.trigger === 'when_enemy_summons'
+      && !!sourceCardId
+      && BASE_CARDS[sourceCardId].cost >= 5
+      && !BASE_CARDS[sourceCardId].token
+      && reactingPlayer.field.length < FIELD_LIMIT;
+  }
+
+  if (def.id === 'grave_caller') {
+    return ctx.trigger === 'when_opponent_sacrifices_bound' && reactingPlayer.field.length < FIELD_LIMIT;
+  }
+
   if (def.id === 'bomb_ghost') {
     return ctx.trigger === 'when_enemy_attacks' && !!attacker && !attacker.keywords.includes('cat');
   }
@@ -251,6 +270,23 @@ function isHoldCardLegallyUsable(card: CardInstance, ctx: ReactionContext, playe
 
   if (def.id === 'fog_ghost') {
     return ctx.trigger === 'when_enemy_attacks' && !!attacker && sourcePlayer.field.length >= reactingPlayer.field.length + 2;
+  }
+
+  if (def.id === 'fat_ghost') {
+    return ctx.trigger === 'when_leader_damaged' && reactingPlayer.field.length < FIELD_LIMIT && !!ctx.incomingDamage && ctx.incomingDamage > 0;
+  }
+
+  if (def.id === 'possessor_ghost') {
+    const sourceCardId = ctx.sourceCardId ?? sourcePlayer.field.find(unit => unit.instanceId === ctx.sourceSpiritInstanceId)?.cardId;
+    return ctx.trigger === 'when_enemy_summons'
+      && !!sourceCardId
+      && BASE_CARDS[sourceCardId].cost >= 5
+      && !BASE_CARDS[sourceCardId].token
+      && reactingPlayer.field.length < FIELD_LIMIT;
+  }
+
+  if (def.id === 'grave_caller') {
+    return ctx.trigger === 'when_opponent_sacrifices_bound' && reactingPlayer.field.length < FIELD_LIMIT;
   }
 
   if (def.id === 'soldier_ghost') {
@@ -286,6 +322,22 @@ function getAiReactionHoldScore(card: CardInstance, ctx: ReactionContext, player
   const def = BASE_CARDS[card.cardId];
   const attacker = getReactionAttacker(ctx, players);
   const reactingPlayer = players[ctx.targetPlayerIndex];
+
+  if (def.id === 'fat_ghost') {
+    if ((ctx.incomingDamage || 0) >= reactingPlayer.leaderHp) return 98;
+    if ((ctx.incomingDamage || 0) >= 3) return 72;
+    return 20;
+  }
+
+  if (def.id === 'possessor_ghost') {
+    const summoned = players[ctx.sourcePlayerIndex].field.find(unit => unit.instanceId === ctx.sourceSpiritInstanceId);
+    if (!summoned) return -999;
+    if (BASE_CARDS[summoned.cardId].id === 'ritual_ghost') return 96;
+    if (BASE_CARDS[summoned.cardId].cost >= 5) return 85;
+    return -999;
+  }
+
+  if (def.id === 'grave_caller') return 70;
 
   if (def.id === 'bomb_ghost') {
     if (!attacker) return -999;
@@ -394,7 +446,7 @@ function LeaderTarget({
       type="button"
       onClick={isClickable ? onClick : undefined}
       disabled={!isClickable}
-      className={`w-24 h-24 rounded-2xl border-2 flex flex-col items-center justify-center shrink-0 transition-all ${
+      className={`w-20 h-20 lg:w-24 lg:h-24 rounded-2xl border-2 flex flex-col items-center justify-center shrink-0 transition-all ${
         isClickable
           ? 'bg-rose-600/30 border-rose-300 ring-4 ring-rose-400/70 shadow-[0_0_28px_rgba(244,63,94,0.65)] cursor-pointer hover:scale-105 animate-pulse'
           : owner === 'enemy'
@@ -402,9 +454,9 @@ function LeaderTarget({
           : 'bg-cyan-950/60 border-cyan-500/50'
       }`}
     >
-      <div className="text-3xl leading-none">🏺</div>
+      <div className="text-2xl lg:text-3xl leading-none">🏺</div>
       <div className="text-[9px] uppercase tracking-widest font-black text-slate-300 mt-1">{label}</div>
-      <div className="text-xl font-black font-mono text-rose-400">
+      <div className="text-lg lg:text-xl font-black font-mono text-rose-400">
         {hp < 10 ? `0${hp}` : hp}<span className="text-xs opacity-50">/{maxHp}</span>
       </div>
     </button>
@@ -514,7 +566,11 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         const defeated: FieldSpirit[] = [];
 
         player.field.forEach(unit => {
-          if (unit.currentHp <= 0) {
+          if (unit.currentHp <= 0 && unit.cardId === 'fat_ghost' && unit.developed && !unit.tankSurvivalUsedThisTurn) {
+            remainingField.push({ ...unit, currentHp: 1, tankSurvivalUsedThisTurn: true });
+            addLog(`🛡️ Developed Tank refuses to fall and survives at 1 HP.`, 'effect');
+            changed = true;
+          } else if (unit.currentHp <= 0) {
             defeated.push(unit);
             changed = true;
           } else {
@@ -582,11 +638,6 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     const defenderPlayerIdx = attackerPlayerIdx === 0 ? 1 : 0;
     const defCard = BASE_CARDS[defender.cardId];
     const atkCard = BASE_CARDS[attacker.cardId];
-
-    if (defender.keywords.includes('cat') && !attacker.keywords.includes('cat')) {
-      addLog('🛡️ That ghost cannot be targeted by this normal attack.', 'effect');
-      return;
-    }
 
     let damage = attacker.atk;
     if (defender.cardId === 'fog_ghost' && defender.originalOwner === defenderPlayerIdx && !defender.fogShieldUsedThisTurn) {
@@ -886,6 +937,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           atk: baseAtk,
           swordBuffedThisTurn: false,
           fogShieldUsedThisTurn: false,
+          tankSurvivalUsedThisTurn: false,
           developed: unit.developed || isExistingNonToken,
           canAttackThisTurn: isExistingNonToken && baseAtk > 0 && !unit.scared,
           scared: false
@@ -940,6 +992,34 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           active.leaderHp = Math.min(STARTING_LEADER_HP, active.leaderHp + 1);
         }
         sounds.playHeal();
+      }
+
+
+      const returningSpirits = active.field.filter(unit => unit.temporaryReturnController !== undefined);
+      if (returningSpirits.length > 0) {
+        active.field = active.field.filter(unit => unit.temporaryReturnController === undefined);
+        returningSpirits.forEach(unit => {
+          const returnIdx = unit.temporaryReturnController as 0 | 1;
+          const returnPlayer = copy[returnIdx];
+          const returned = {
+            ...unit,
+            temporaryReturnController: undefined,
+            cannotAttackLeaderUntilReturn: undefined,
+            canAttackThisTurn: false,
+            scared: true,
+            summonedTurn: turnCount
+          };
+          if (returnPlayer.field.length < FIELD_LIMIT) {
+            returnPlayer.field.push(returned);
+            addLog(`👻 ${BASE_CARDS[unit.cardId].name} snaps back to ${returnPlayer.name}'s field Scared.`, 'effect');
+          } else if (returnPlayer.hand.length < HAND_LIMIT) {
+            returnPlayer.hand.push({ instanceId: unit.instanceId, cardId: unit.cardId, originalOwner: unit.originalOwner });
+            addLog(`👻 ${BASE_CARDS[unit.cardId].name} tries to return Scared, but the field is full. It returns to ${returnPlayer.name}'s hand instead.`, 'effect');
+          } else {
+            setDiscardPile(dp => [...dp, { instanceId: unit.instanceId, cardId: unit.cardId, originalOwner: unit.originalOwner, defeatedDeveloped: unit.developed }]);
+            addLog(`👻 ${BASE_CARDS[unit.cardId].name} has nowhere to return and collapses into the discard.`, 'effect');
+          }
+        });
       }
 
       return copy;
@@ -1010,6 +1090,29 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       player.currentPsy -= def.cost;
       player.hasManifestedThisTurn = true;
 
+      const callBackSacrificedBoundGhost = (unit: FieldSpirit) => {
+        const ownerIdx = unit.originalOwner as 0 | 1;
+        if (ownerIdx === currentPlayer || unit.keywords.includes('token')) return false;
+        const owner = copy[ownerIdx];
+        if (owner.field.length >= FIELD_LIMIT) return false;
+        const caller = owner.hand.find(card => card.cardId === 'grave_caller');
+        if (!caller) return false;
+        owner.hand = owner.hand.filter(card => card.instanceId !== caller.instanceId);
+        setDiscardPile(dp => [...dp, caller]);
+        owner.field.push({
+          ...unit,
+          currentHp: Math.max(1, unit.currentHp),
+          canAttackThisTurn: false,
+          summonedTurn: turnCount,
+          scared: false,
+          burn: 0,
+          temporaryReturnController: undefined,
+          cannotAttackLeaderUntilReturn: undefined
+        });
+        addLog(`🔔 Grave Caller Hold rings out! ${BASE_CARDS[unit.cardId].name} was Bound to ${owner.name}, so it returns to their field exhausted.`, 'hold');
+        return true;
+      };
+
       if (def.id === 'bomb_ghost') {
         const leaderDamage = isBoundManifest ? 1 : 2;
         addLog(`💣 Bomb Ghost explodes for 4 damage to every spirit and ${leaderDamage} damage to both Leaders! ${isBoundManifest ? 'Your Bound ghosts duck for -1 blast damage.' : 'Borrowed Bomb is unstable!'}`, 'effect');
@@ -1031,8 +1134,9 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         addLog(`🕯️ Ritual Ghost sacrifices ${sacrifices.map(unit => BASE_CARDS[unit.cardId].name).join(' and ')}.`, 'effect');
         player.field = player.field.filter(unit => !sacrificeIds.has(unit.instanceId));
         sacrifices.forEach(unit => {
+          const wasCalledBack = callBackSacrificedBoundGhost(unit);
           if (!unit.keywords.includes('token')) {
-            setDiscardPile(dp => [...dp, { instanceId: unit.instanceId, cardId: unit.cardId, originalOwner: unit.originalOwner, defeatedDeveloped: unit.developed }]);
+            setDiscardPile(dp => wasCalledBack ? dp : [...dp, { instanceId: unit.instanceId, cardId: unit.cardId, originalOwner: unit.originalOwner, defeatedDeveloped: unit.developed }]);
           }
           if (unit.cardId === 'bones_ghost' && unit.developed) {
             addLog(`🦴 Developed Bones turns the ritual sacrifice into a stronger echo. ${player.name} draws 1 card.`, 'effect');
@@ -1104,7 +1208,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           const damage = baseOathDamage + developedBonus + (fromEnemyField ? 1 : 0);
           copy[sacrifice.controllerIdx].field = copy[sacrifice.controllerIdx].field.filter(unit => unit.instanceId !== sacrifice.unit.instanceId);
           copy[enemyIdx].leaderHp -= damage;
-          setDiscardPile(dp => [...dp, { instanceId: sacrifice.unit.instanceId, cardId: sacrifice.unit.cardId, originalOwner: sacrifice.unit.originalOwner, defeatedDeveloped: sacrifice.unit.developed }]);
+          const wasCalledBack = callBackSacrificedBoundGhost(sacrifice.unit);
+          setDiscardPile(dp => wasCalledBack ? dp : [...dp, { instanceId: sacrifice.unit.instanceId, cardId: sacrifice.unit.cardId, originalOwner: sacrifice.unit.originalOwner, defeatedDeveloped: sacrifice.unit.developed }]);
           addLog(`🪦 Oathbreaker sacrifices ${sacrificedName} Bound to ${player.name} from ${copy[sacrifice.controllerIdx].name}'s field.`, 'effect');
           if (wasDeveloped) addLog('🌙 The Developed bond adds +2 broken-oath damage!', 'effect');
           if (fromEnemyField) addLog('🔗 The stolen bond snaps back for +1 damage!', 'effect');
@@ -1285,7 +1390,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       trigger: instance.cardId === 'wisp_token' ? 'when_enemy_summons_token' : 'when_enemy_summons',
       sourcePlayerIndex: currentPlayer,
       targetPlayerIndex: enemyIdx,
-      sourceSpiritInstanceId: instance.instanceId
+      sourceSpiritInstanceId: instance.instanceId,
+      sourceCardId: instance.cardId
     });
   }, [addLog, checkReshuffle, currentPlayer, discardPile, phase, players, reactionContext, resolveDefeatedUnits, sharedDeck, triggerHoldReactionWindow, turnCount, winner]);
 
@@ -1515,7 +1621,57 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     const sourcePlayerIdx = reactionContext.sourcePlayerIndex as 0 | 1;
     const attacker = players[sourcePlayerIdx].field.find(unit => unit.instanceId === reactionContext.sourceSpiritInstanceId);
 
-    if (def.id === 'fog_ghost') {
+    if (def.id === 'fat_ghost') {
+      const prevented = Math.min(4, reactionContext.incomingDamage || 0);
+      const remaining = Math.max(0, (reactionContext.incomingDamage || 0) - prevented);
+      addLog(`🛡️ Tank Ghost jumps in front and prevents ${prevented} Leader damage${remaining > 0 ? ` (${remaining} gets through)` : ''}!`, 'effect');
+      setPlayers(prev => {
+        const copy = clonePlayers(prev);
+        const tank = makeSpirit(cardInst, turnCount, reactingPlayerIdx);
+        tank.currentHp = Math.max(1, tank.maxHp - remaining);
+        tank.developed = cardInst.originalOwner === reactingPlayerIdx;
+        tank.canAttackThisTurn = false;
+        copy[reactingPlayerIdx].field.push(tank);
+        copy[reactingPlayerIdx].leaderHp -= remaining;
+        if (cardInst.originalOwner !== reactingPlayerIdx) {
+          copy[cardInst.originalOwner].bonusPsyNextTurn = (copy[cardInst.originalOwner].bonusPsyNextTurn || 0) + 1;
+          addLog(`🔗 Borrowed Tank saved ${reactingPlayer.name}. ${copy[cardInst.originalOwner].name} steals +1 bonus Psy next turn.`, 'effect');
+        } else {
+          addLog('🌙 Bound Tank enters Developed after the save.', 'effect');
+        }
+        if (remaining > 0 && attacker?.cardId === 'bite_ghost') {
+          if (attacker.originalOwner === sourcePlayerIdx && copy[reactingPlayerIdx].currentPsy > 0) {
+            copy[reactingPlayerIdx].currentPsy = Math.max(0, copy[reactingPlayerIdx].currentPsy - 1);
+            copy[sourcePlayerIdx].currentPsy = Math.min(copy[sourcePlayerIdx].maxPsy, copy[sourcePlayerIdx].currentPsy + 1);
+            addLog(`🩸 Bound Bite still steals 1 current Psy through the gap.`, 'effect');
+          } else if (attacker.originalOwner !== sourcePlayerIdx) {
+            copy[attacker.originalOwner].bonusPsyNextTurn = (copy[attacker.originalOwner].bonusPsyNextTurn || 0) + 1;
+            addLog(`🔗 Borrowed Bite snaps back after the blocked hit. ${copy[attacker.originalOwner].name} steals +1 bonus Psy next turn.`, 'effect');
+          }
+        }
+        return copy;
+      });
+      if (attacker) exhaustAttacker(sourcePlayerIdx, attacker.instanceId);
+    } else if (def.id === 'possessor_ghost') {
+      const summoned = players[sourcePlayerIdx].field.find(unit => unit.instanceId === reactionContext.sourceSpiritInstanceId);
+      if (summoned) {
+        addLog(`🌀 Possessor swoops into ${BASE_CARDS[summoned.cardId].name}! You drive it for your next turn, then it returns Scared.`, 'effect');
+        setPlayers(prev => {
+          const copy = clonePlayers(prev);
+          const stolen = copy[sourcePlayerIdx].field.find(unit => unit.instanceId === summoned.instanceId);
+          if (!stolen || copy[reactingPlayerIdx].field.length >= FIELD_LIMIT) return copy;
+          copy[sourcePlayerIdx].field = copy[sourcePlayerIdx].field.filter(unit => unit.instanceId !== stolen.instanceId);
+          copy[reactingPlayerIdx].field.push({
+            ...stolen,
+            canAttackThisTurn: false,
+            scared: false,
+            temporaryReturnController: sourcePlayerIdx,
+            cannotAttackLeaderUntilReturn: true
+          });
+          return copy;
+        });
+      }
+    } else if (def.id === 'fog_ghost') {
       if (attacker) {
         addLog(`🌫️ Fog Ghost cancels ${BASE_CARDS[attacker.cardId].name}'s attack because ${players[sourcePlayerIdx].name} has at least 2 more spirits than ${reactingPlayer.name}.`, 'effect');
         exhaustAttacker(sourcePlayerIdx, attacker.instanceId);
@@ -1770,14 +1926,14 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     return !!attacker && attacker.currentHp > 0 && !attacker.keywords.includes('cat') && !attacker.swordBuffedThisTurn;
   };
 
-  const unitCardClass = '!w-28 !h-40 lg:!w-32 lg:!h-44';
+  const unitCardClass = '!w-[clamp(5.25rem,8vw,8rem)] !h-[clamp(7.25rem,20vh,11rem)]';
   const battleLogText = log.map(entry => `[${entry.timestamp}] ${entry.type.toUpperCase()}: ${entry.text}`).join('\n');
   const copyBattleLog = () => {
     navigator.clipboard?.writeText(battleLogText);
   };
 
   return (
-    <div className="flex flex-col min-h-[620px] w-full max-w-[1500px] mx-auto bg-[#0f172a] text-slate-100 font-sans overflow-visible border-4 sm:border-8 border-[#1e293b] rounded-2xl shadow-2xl relative select-none">
+    <div className="flex h-full max-h-[calc(100vh-4.25rem)] min-h-0 w-full max-w-[1500px] flex-col mx-auto bg-[#0f172a] text-slate-100 font-sans overflow-hidden border-4 sm:border-8 border-[#1e293b] rounded-2xl shadow-2xl relative select-none">
       {winner && (
         <div className="absolute inset-0 bg-slate-950/92 backdrop-blur-md z-50 flex items-center justify-center p-4 sm:p-8 animate-fade-in overflow-y-auto">
           <div className="w-full max-w-5xl rounded-3xl border-2 border-cyan-500/40 bg-slate-950/95 p-4 sm:p-6 shadow-[0_0_40px_rgba(34,211,238,0.25)]">
@@ -1808,7 +1964,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
               <textarea
                 readOnly
                 value={battleLogText}
-                className="h-56 w-full resize-y rounded-xl border border-slate-800 bg-slate-900/80 p-3 font-mono text-[11px] leading-relaxed text-slate-200 outline-none selection:bg-cyan-500 selection:text-slate-950"
+                className="h-[min(42vh,16rem)] w-full resize-y rounded-xl border border-slate-800 bg-slate-900/80 p-3 font-mono text-[11px] leading-relaxed text-slate-200 outline-none selection:bg-cyan-500 selection:text-slate-950"
               />
             </div>
 
@@ -1859,7 +2015,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         </div>
       </div>
 
-      <div className="relative grid min-h-[500px] grid-cols-[1fr_210px] xl:grid-cols-[1fr_230px] p-2 gap-2 overflow-hidden">
+      <div className="relative grid flex-1 min-h-0 grid-cols-[1fr_190px] xl:grid-cols-[1fr_220px] p-1.5 sm:p-2 gap-1.5 sm:gap-2 overflow-hidden">
         <div className="flex flex-col justify-between overflow-hidden pr-1 gap-2">
           <div className="flex justify-center items-center gap-2 shrink-0">
             <LeaderTarget
@@ -1897,10 +2053,10 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
             </div>
           </div>
 
-          <div className="flex justify-center items-center gap-6 py-0 shrink-0">
+          <div className="flex justify-center items-center gap-4 lg:gap-6 py-0 shrink-0">
             <div className="text-center group">
-              <div className="w-16 h-24 bg-[#312e81] rounded-lg border-2 border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.5)] flex flex-col items-center justify-center relative transition-transform group-hover:scale-105">
-                <div className="text-3xl">🏺</div>
+              <div className="w-12 h-16 lg:w-16 lg:h-24 bg-[#312e81] rounded-lg border-2 border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.5)] flex flex-col items-center justify-center relative transition-transform group-hover:scale-105">
+                <div className="text-2xl lg:text-3xl">🏺</div>
                 <div className="absolute -top-3 -right-3 w-7 h-7 rounded-full bg-cyan-500 flex items-center justify-center font-black text-xs text-slate-950 shadow">
                   {sharedDeck.length}
                 </div>
@@ -1910,8 +2066,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
             </div>
 
             <div className="text-center group">
-              <div className="w-16 h-24 bg-slate-900 rounded-lg border-2 border-slate-700 flex flex-col items-center justify-center grayscale opacity-70 transition-opacity group-hover:opacity-100">
-                <div className="text-3xl">💀</div>
+              <div className="w-12 h-16 lg:w-16 lg:h-24 bg-slate-900 rounded-lg border-2 border-slate-700 flex flex-col items-center justify-center grayscale opacity-70 transition-opacity group-hover:opacity-100">
+                <div className="text-2xl lg:text-3xl">💀</div>
                 <div className="text-[10px] font-mono text-slate-400 mt-1">{discardPile.length}</div>
               </div>
               <div className="text-[10px] uppercase mt-1 font-bold text-slate-500 tracking-widest">Discard</div>
@@ -2110,7 +2266,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
 
       <CardDetailPreview card={hoveredCard} />
 
-      <div className="h-36 bg-[#1e1b4b] border-t-2 border-cyan-500 p-2 flex gap-2 items-end shrink-0">
+      <div className="h-[clamp(7rem,17vh,9rem)] bg-[#1e1b4b] border-t-2 border-cyan-500 p-1.5 sm:p-2 flex gap-2 items-end shrink-0">
         <div className="flex-1 flex justify-center gap-2 overflow-x-auto overflow-y-hidden pt-1 px-2 pb-1">
           {humanPlayer.hand.length === 0 ? (
             <div className="text-slate-500 italic text-xs self-center pb-8">No cards in hand. Draw on next turn.</div>
@@ -2175,7 +2331,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
                       }
                     }}
                     disabledReason={!canPlayManifest && !usableInReaction && !usableInReactPhase && !usableInAttackTrick ? disabledReason : undefined}
-                    className="!w-28 !h-32 lg:!w-32 lg:!h-[8.5rem] text-[9px]"
+                    className="!w-[clamp(5.5rem,8vw,8rem)] !h-[clamp(6.5rem,15vh,8.5rem)] text-[9px]"
                     showBadge={getOwnershipLabel(cardInst.originalOwner, 0)}
                     compact
                   />
@@ -2213,7 +2369,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         </div>
       </div>
 
-      <div className="border-t border-slate-800 bg-slate-950 p-3">
+      <div className="border-t border-slate-800 bg-slate-950 p-2 sm:p-3 shrink-0">
         <div className="mb-2 flex items-center justify-between gap-3">
           <div>
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Battle Log</div>
@@ -2230,7 +2386,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         <textarea
           readOnly
           value={battleLogText}
-          className="h-40 w-full resize-y rounded-xl border border-slate-800 bg-slate-900/80 p-3 font-mono text-[11px] leading-relaxed text-slate-200 outline-none selection:bg-cyan-500 selection:text-slate-950"
+          className="h-[clamp(4.5rem,14vh,10rem)] w-full resize-y rounded-xl border border-slate-800 bg-slate-900/80 p-3 font-mono text-[11px] leading-relaxed text-slate-200 outline-none selection:bg-cyan-500 selection:text-slate-950"
         />
       </div>
     </div>

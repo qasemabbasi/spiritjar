@@ -65,3 +65,12 @@ The app is a Vite + React project and can be deployed to Vercel with the default
 ## Card text format
 
 Card details now use the same section order everywhere: Manifest Effect, Hold Effect, Attack Effect, Defense Effect, Defeat Effect, then Bound, Borrowed, and Developed. Role/Field text has been removed from the UI.
+
+
+## Latest patch: counter holds + viewport scaling
+
+- Added Tank Hold: when your Leader would take damage from a direct attack, Tank manifests and prevents up to 4 damage. Bound Tank enters Developed; Borrowed Tank pays the original binder +1 bonus Psy next turn.
+- Added Possessor Hold: when the opponent Manifests a 5-cost ghost, Possessor swoops in and takes it until the end of your next turn. The stolen ghost cannot hit Leaders and returns Scared.
+- Added Grave Caller sacrifice counterplay: if the opponent sacrifices a ghost Bound to you and you have room, a Grave Caller in hand calls that ghost back to your field exhausted.
+- Developed Tank now survives the first defeat each turn at 1 HP.
+- Tightened battlefield sizing with viewport-based scaling so the board, hand, controls, and log fit better on one screen.

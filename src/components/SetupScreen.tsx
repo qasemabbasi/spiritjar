@@ -77,11 +77,11 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
   const previewCard = previewCardId ? BASE_CARDS[previewCardId] : null;
 
   return (
-    <div className="flex flex-col min-h-[768px] w-full max-w-5xl mx-auto bg-[#0f172a] text-slate-100 font-sans border-8 border-[#1e293b] rounded-2xl shadow-2xl overflow-hidden relative">
+    <div className="flex h-full min-h-0 w-full max-w-6xl mx-auto bg-[#0f172a] text-slate-100 font-sans border-4 sm:border-8 border-[#1e293b] rounded-2xl shadow-2xl overflow-hidden relative">
       <div className="absolute inset-0 bg-gradient-to-br from-indigo-950/30 via-slate-900/10 to-[#0f172a] pointer-events-none" />
 
       {/* Top Header */}
-      <div className="flex justify-between items-center p-4 bg-[#1e1b4b] border-b border-cyan-500/30 relative z-10">
+      <div className="flex flex-wrap justify-between items-center gap-3 p-3 sm:p-4 bg-[#1e1b4b] border-b border-cyan-500/30 relative z-10">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-full bg-cyan-500 flex items-center justify-center font-black text-xl text-slate-950">
             P1
@@ -122,7 +122,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
       </div>
 
       {/* Main Selection Area */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_320px] p-4 sm:p-6 gap-5 overflow-hidden relative z-10">
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_320px] p-3 sm:p-4 gap-4 overflow-hidden relative z-10">
         {/* Collection Grid */}
         <div className="flex flex-col overflow-hidden">
           <div className="flex justify-between items-center mb-4">
