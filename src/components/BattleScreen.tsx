@@ -370,7 +370,9 @@ function CardDetailPreview({ card }: { card: CardDefinition | null }) {
         {card.attackText && <div><span className="font-black text-rose-400">ATTACK:</span> {card.attackText}</div>}
         {card.defeatText && <div><span className="font-black text-slate-400">DEFEAT:</span> {card.defeatText}</div>}
         {card.hasHold && <div><span className="font-black text-amber-400">HOLD:</span> {card.holdText}</div>}
-        {!card.manifestText && !card.fieldText && !card.attackText && !card.defeatText && !card.hasHold && (
+        {card.boundText && <div><span className="font-black text-cyan-300">BOUND:</span> {card.boundText}</div>}
+        {card.borrowedText && <div><span className="font-black text-fuchsia-300">BORROWED:</span> {card.borrowedText}</div>}
+        {!card.manifestText && !card.fieldText && !card.attackText && !card.defeatText && !card.hasHold && !card.boundText && !card.borrowedText && (
           <div className="text-slate-400">No special rules.</div>
         )}
       </div>
@@ -578,14 +580,47 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       return;
     }
 
-    const damage = attacker.atk;
+    let damage = attacker.atk;
+    if (defender.cardId === 'fog_ghost' && defender.originalOwner === defenderPlayerIdx) {
+      damage = Math.max(0, damage - 1);
+      addLog(`😱 Bound Fog scares ${atkCard.name}. Incoming damage is reduced by 1.`, 'effect');
+    }
+
     sounds.playAttack();
     addLog(`⚔️ ${atkCard.name} attacks ${defCard.name} for ${damage} damage.`, 'attack');
     const targetSurvives = defender.currentHp - damage > 0;
+    const targetDefeated = defender.currentHp - damage <= 0;
     applyDamageToSpirit(defenderPlayerIdx, defender.instanceId, damage, targetSurvives ? attacker.cardId : undefined, true);
 
     if (attacker.cardId === 'flame_ghost' && targetSurvives) {
       addLog(`🔥 Flame Ghost applied Burn ${FLAME_BURN_AMOUNT} to ${defCard.name}!`, 'effect');
+    }
+
+    if (targetDefeated && attacker.cardId === 'spear_ghost' && attacker.originalOwner === attackerPlayerIdx && !defender.keywords.includes('token')) {
+      addLog(`🪡 Bound Spear pierces past ${defCard.name} for 1 Leader damage!`, 'effect');
+      setPlayers(prev => {
+        const copy = clonePlayers(prev);
+        copy[defenderPlayerIdx].leaderHp -= 1;
+        return copy;
+      });
+    }
+
+    if (targetDefeated && attacker.cardId === 'loud_ghost' && attacker.originalOwner === attackerPlayerIdx && !defender.keywords.includes('token')) {
+      addLog(`📢 Bound Loud's shout passes through for 1 Leader damage!`, 'effect');
+      setPlayers(prev => {
+        const copy = clonePlayers(prev);
+        copy[defenderPlayerIdx].leaderHp -= 1;
+        return copy;
+      });
+    }
+
+    if (targetDefeated && attacker.cardId === 'loud_ghost' && attacker.originalOwner !== attackerPlayerIdx && defender.originalOwner === attacker.originalOwner && !defender.keywords.includes('token')) {
+      addLog(`🔗 Borrowed Loud destroyed a ghost Bound to its original binder. ${players[attacker.originalOwner].name} steals +1 bonus Psy next turn.`, 'effect');
+      setPlayers(prev => {
+        const copy = clonePlayers(prev);
+        copy[attacker.originalOwner].bonusPsyNextTurn = (copy[attacker.originalOwner].bonusPsyNextTurn || 0) + 1;
+        return copy;
+      });
     }
 
     if (attacker.keywords.includes('splash')) {
@@ -611,6 +646,16 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     setPlayers(prev => {
       const copy = clonePlayers(prev);
       copy[targetPlayerIdx].leaderHp -= attacker.atk;
+      if (attacker.cardId === 'bite_ghost') {
+        if (attacker.originalOwner === attackerPlayerIdx && copy[targetPlayerIdx].currentPsy > 0) {
+          copy[targetPlayerIdx].currentPsy = Math.max(0, copy[targetPlayerIdx].currentPsy - 1);
+          copy[attackerPlayerIdx].currentPsy = Math.min(copy[attackerPlayerIdx].maxPsy, copy[attackerPlayerIdx].currentPsy + 1);
+          addLog(`🩸 Bound Bite steals 1 current Psy from ${copy[targetPlayerIdx].name}.`, 'effect');
+        } else if (attacker.originalOwner !== attackerPlayerIdx) {
+          copy[attacker.originalOwner].bonusPsyNextTurn = (copy[attacker.originalOwner].bonusPsyNextTurn || 0) + 1;
+          addLog(`🔗 Borrowed Bite snaps back. ${copy[attacker.originalOwner].name} steals +1 bonus Psy next turn.`, 'effect');
+        }
+      }
       return copy;
     });
     exhaustAttacker(attackerPlayerIdx, attacker.instanceId);
@@ -729,7 +774,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       active.hasAttackedThisTurn = false;
 
       if (bonusPsy > 0) {
-        addLog(`✨ ${active.name} gains +${bonusPsy} bonus Psy from Old Ghost.`, 'effect');
+        addLog(`✨ ${active.name} gains +${bonusPsy} bonus Psy from stolen spirit power.`, 'effect');
       }
 
       // Burn ticks at the start of the burned unit owner's turn, then decays by 1.
@@ -791,10 +836,11 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       const active = copy[playerIdx];
       let updatedField = [...active.field];
 
-      const hasLantern = updatedField.some(unit => unit.cardId === 'lantern_ghost' && unit.currentHp > 0);
+      const lantern = updatedField.find(unit => unit.cardId === 'lantern_ghost' && unit.currentHp > 0);
       const hasWisp = updatedField.some(unit => unit.cardId === 'wisp_token' && unit.currentHp > 0);
-      if (hasLantern && !hasWisp && updatedField.length < FIELD_LIMIT) {
-        addLog('🏮 Lantern Ghost lures a Wisp token to the field!', 'effect');
+      if (lantern && !hasWisp && updatedField.length < FIELD_LIMIT) {
+        const lanternIsBound = lantern.originalOwner === playerIdx;
+        addLog(`🏮 Lantern Ghost lures a Wisp token to the field! ${lanternIsBound ? 'It is Bound to its controller.' : 'It remains Bound to the original binder.'}`, 'effect');
         updatedField.push({
           instanceId: `token_wisp_${Math.random().toString(36).slice(2, 8)}`,
           cardId: 'wisp_token',
@@ -805,7 +851,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           canAttackThisTurn: false,
           summonedTurn: turnCount,
           burn: 0,
-          originalOwner: playerIdx,
+          originalOwner: lantern.originalOwner,
           developed: false
         });
       }
@@ -857,6 +903,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     if (phase !== 'main' || reactionContext || winner) return;
     const active = players[currentPlayer];
     const def = BASE_CARDS[instance.cardId];
+    const isBoundManifest = instance.originalOwner === currentPlayer;
 
     if (active.hasManifestedThisTurn) {
       addLog('⚠️ You already Manifested this turn.', 'system');
@@ -892,11 +939,15 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       player.hasManifestedThisTurn = true;
 
       if (def.id === 'bomb_ghost') {
-        addLog('💣 Bomb Ghost explodes for 4 damage to every spirit and 1 damage to both Leaders! This can hit Cats.', 'effect');
+        const leaderDamage = isBoundManifest ? 1 : 2;
+        addLog(`💣 Bomb Ghost explodes for 4 damage to every spirit and ${leaderDamage} damage to both Leaders! ${isBoundManifest ? 'Your Bound ghosts duck for -1 blast damage.' : 'Borrowed Bomb is unstable!'} This can hit Cats.`, 'effect');
         sounds.playBurn();
-        copy.forEach(boardPlayer => {
-          boardPlayer.field = boardPlayer.field.map(unit => ({ ...unit, currentHp: unit.currentHp - 4 }));
-          boardPlayer.leaderHp -= 1;
+        copy.forEach((boardPlayer, boardIdx) => {
+          boardPlayer.field = boardPlayer.field.map(unit => {
+            const protectedByBoundBomb = isBoundManifest && boardIdx === currentPlayer && unit.originalOwner === currentPlayer;
+            return { ...unit, currentHp: unit.currentHp - (protectedByBoundBomb ? 3 : 4) };
+          });
+          boardPlayer.leaderHp -= leaderDamage;
         });
         setDiscardPile(dp => [...dp, instance]);
         return copy;
@@ -912,6 +963,27 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
             setDiscardPile(dp => [...dp, { instanceId: unit.instanceId, cardId: unit.cardId, originalOwner: unit.originalOwner, defeatedDeveloped: unit.developed }]);
           }
         });
+
+        const sacrificedDeveloped = sacrifices.some(unit => unit.developed && !unit.keywords.includes('token'));
+        if (isBoundManifest && sacrificedDeveloped && player.hand.length < HAND_LIMIT) {
+          let currentDeck = [...sharedDeck];
+          let currentDiscard = [...discardPile];
+          const reshuffled = checkReshuffle(currentDeck, currentDiscard);
+          currentDeck = reshuffled.newDeck;
+          currentDiscard = reshuffled.newDiscard;
+          setDiscardPile(currentDiscard);
+          if (currentDeck.length > 0) {
+            const drawn = currentDeck[0];
+            player.hand = [...player.hand, drawn];
+            setSharedDeck(currentDeck.slice(1));
+            addLog(`🌙 Bound Ritual feeds on a Developed sacrifice. ${player.name} draws ${BASE_CARDS[drawn.cardId].name}.`, 'effect');
+          }
+        }
+
+        if (!isBoundManifest && sacrifices.some(unit => unit.originalOwner === instance.originalOwner && !unit.keywords.includes('token'))) {
+          copy[instance.originalOwner].bonusPsyNextTurn = (copy[instance.originalOwner].bonusPsyNextTurn || 0) + 1;
+          addLog(`🔗 Borrowed Ritual used a ghost Bound to ${copy[instance.originalOwner].name}. They steal +1 bonus Psy next turn.`, 'effect');
+        }
       }
 
       if (def.id === 'oathbreaker_ghost') {
@@ -931,6 +1003,11 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           if (wasDeveloped) addLog('🌙 The Developed bond adds +1 damage!', 'effect');
           if (fromEnemyField) addLog('🔗 The stolen bond snaps back for +1 damage!', 'effect');
           addLog(`💔 ${sacrificedName}'s broken oath deals ${damage} damage to ${copy[enemyIdx].name}'s Leader!`, 'attack');
+
+          if (!isBoundManifest) {
+            copy[instance.originalOwner].bonusPsyNextTurn = (copy[instance.originalOwner].bonusPsyNextTurn || 0) + 1;
+            addLog(`🔗 Borrowed Oathbreaker demands payment. ${copy[instance.originalOwner].name} steals +1 bonus Psy next turn.`, 'effect');
+          }
 
           if (wasDeveloped) {
             addLog(`🌙 Developed ${sacrificedName} leaves a stronger echo. ${player.name} draws 1 card.`, 'effect');
@@ -955,23 +1032,39 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
 
       if (def.id === 'possessor_ghost') {
         const enemyIdx = currentPlayer === 0 ? 1 : 0;
-        const reclaimTarget = copy[enemyIdx].field
-          .filter(unit => unit.currentHp > 0 && unit.currentHp < unit.maxHp && unit.originalOwner === currentPlayer && !unit.keywords.includes('token'))
-          .sort((a, b) => (BASE_CARDS[b.cardId].cost - BASE_CARDS[a.cardId].cost) || b.atk - a.atk)[0];
-        if (reclaimTarget && player.field.length < FIELD_LIMIT) {
-          copy[enemyIdx].field = copy[enemyIdx].field.filter(unit => unit.instanceId !== reclaimTarget.instanceId);
-          player.field = [...player.field, {
-            ...reclaimTarget,
-            atk: reclaimTarget.developed ? reclaimTarget.atk + 1 : reclaimTarget.atk,
-            canAttackThisTurn: !!reclaimTarget.developed && reclaimTarget.atk > 0,
-            summonedTurn: reclaimTarget.developed ? reclaimTarget.summonedTurn : turnCount
-          }];
-          addLog(`👻 Possessor Ghost reclaims ${BASE_CARDS[reclaimTarget.cardId].name} from ${copy[enemyIdx].name}'s field because it is Bound to ${player.name}.`, 'effect');
-          if (reclaimTarget.developed) addLog(`🌙 Developed ${BASE_CARDS[reclaimTarget.cardId].name} comes back ready with +1 ATK this turn.`, 'effect');
-        } else if (reclaimTarget) {
-          addLog('⚠️ Possessor Ghost found a Bound target, but your field has no room to reclaim it.', 'system');
+        if (isBoundManifest) {
+          const reclaimTarget = copy[enemyIdx].field
+            .filter(unit => unit.currentHp > 0 && unit.currentHp < unit.maxHp && unit.originalOwner === currentPlayer && !unit.keywords.includes('token'))
+            .sort((a, b) => (BASE_CARDS[b.cardId].cost - BASE_CARDS[a.cardId].cost) || b.atk - a.atk)[0];
+          if (reclaimTarget && player.field.length < FIELD_LIMIT) {
+            copy[enemyIdx].field = copy[enemyIdx].field.filter(unit => unit.instanceId !== reclaimTarget.instanceId);
+            player.field = [...player.field, {
+              ...reclaimTarget,
+              atk: reclaimTarget.developed ? reclaimTarget.atk + 1 : reclaimTarget.atk,
+              canAttackThisTurn: !!reclaimTarget.developed && reclaimTarget.atk > 0,
+              summonedTurn: reclaimTarget.developed ? reclaimTarget.summonedTurn : turnCount
+            }];
+            addLog(`👻 Bound Possessor reclaims ${BASE_CARDS[reclaimTarget.cardId].name} from ${copy[enemyIdx].name}'s field.`, 'effect');
+            if (reclaimTarget.developed) addLog(`🌙 Developed ${BASE_CARDS[reclaimTarget.cardId].name} comes back ready with +1 ATK this turn.`, 'effect');
+          } else if (reclaimTarget) {
+            addLog('⚠️ Possessor Ghost found a Bound target, but your field has no room to reclaim it.', 'system');
+          } else {
+            addLog('👻 Bound Possessor found no damaged enemy-controlled ghost Bound to you.', 'effect');
+          }
         } else {
-          addLog('👻 Possessor Ghost found no damaged enemy-controlled ghost Bound to you.', 'effect');
+          const possessorUnit = player.field.find(unit => unit.instanceId === instance.instanceId);
+          const swapTarget = copy[enemyIdx].field
+            .filter(unit => unit.currentHp > 0 && unit.currentHp < unit.maxHp && !unit.keywords.includes('token'))
+            .sort((a, b) => (BASE_CARDS[b.cardId].cost - BASE_CARDS[a.cardId].cost) || b.atk - a.atk)[0];
+          if (possessorUnit && swapTarget) {
+            player.field = player.field.filter(unit => unit.instanceId !== possessorUnit.instanceId);
+            copy[enemyIdx].field = copy[enemyIdx].field.filter(unit => unit.instanceId !== swapTarget.instanceId);
+            player.field.push({ ...swapTarget, canAttackThisTurn: false, summonedTurn: turnCount });
+            copy[enemyIdx].field.push({ ...possessorUnit, canAttackThisTurn: false, summonedTurn: turnCount });
+            addLog(`🌀 Borrowed Possessor swaps places with damaged ${BASE_CARDS[swapTarget.cardId].name}. You steal it, but it enters exhausted.`, 'effect');
+          } else {
+            addLog('👻 Borrowed Possessor found no damaged enemy ghost to swap with.', 'effect');
+          }
         }
       }
 
@@ -987,6 +1080,10 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
             player.currentPsy = Math.min(player.maxPsy, player.currentPsy + 1);
             addLog(`🌙 Developed ${BASE_CARDS[recalled.cardId].name}'s echo refunds 1 Psy.`, 'effect');
           }
+          if (!isBoundManifest) {
+            copy[instance.originalOwner].bonusPsyNextTurn = (copy[instance.originalOwner].bonusPsyNextTurn || 0) + 1;
+            addLog(`🔗 Borrowed Grave Caller rings back to ${copy[instance.originalOwner].name}. They steal +1 bonus Psy next turn.`, 'effect');
+          }
         } else if (recalled) {
           addLog('⚠️ Grave Caller heard a Bound ghost, but your hand is full.', 'system');
         } else {
@@ -1001,7 +1098,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       }
 
       if (def.id === 'lantern_ghost' && player.field.length < FIELD_LIMIT) {
-        addLog('🏮 Lantern Ghost summons a Wisp token!', 'effect');
+        addLog(`🏮 Lantern Ghost summons a Wisp token! ${isBoundManifest ? 'Bound Wisp enters ready.' : "Borrowed Lantern\'s Wisp stays Bound to its original binder."}`, 'effect');
         player.field.push({
           instanceId: `token_wisp_${Math.random().toString(36).slice(2, 8)}`,
           cardId: 'wisp_token',
@@ -1009,10 +1106,10 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           maxHp: 1,
           atk: 1,
           keywords: ['token'],
-          canAttackThisTurn: false,
+          canAttackThisTurn: isBoundManifest,
           summonedTurn: turnCount,
           burn: 0,
-          originalOwner: currentPlayer,
+          originalOwner: instance.originalOwner,
           developed: false
         });
       }
@@ -1608,7 +1705,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
               onClick={() => handleTargetClick(undefined, true)}
             />
             <div className="flex justify-center gap-2 items-center">
-              {[0, 1, 2, 3].map(slotIdx => {
+              {[0, 1, 2].map(slotIdx => {
                 const unit = computerPlayer.field[slotIdx];
                 const canBeTargeted = !!(
                   humanCanAct &&
@@ -1658,7 +1755,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           <div className="flex justify-center items-center gap-2 shrink-0">
             <LeaderTarget label="Your Leader" hp={humanPlayer.leaderHp} maxHp={STARTING_LEADER_HP} owner="player" />
             <div className="flex justify-center gap-2 items-center">
-              {[0, 1, 2, 3].map(slotIdx => {
+              {[0, 1, 2].map(slotIdx => {
                 const unit = humanPlayer.field[slotIdx];
                 const isChoosingSwordTarget = !!(pendingTargetHoldCard && BASE_CARDS[pendingTargetHoldCard.cardId]?.id === 'sword_ghost');
                 const isEligibleAttacker = !!(humanCanAct && !isChoosingSwordTarget && phase === 'attack' && unit && getValidAttackers(humanPlayer, computerPlayer, turnCount).some(attacker => attacker.instanceId === unit.instanceId));

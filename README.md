@@ -7,6 +7,7 @@ Spirit Jar is a single-player prototype card battler: **Player 1 vs Spirit Lord 
 - Each player has a Leader with 10 HP. Reduce the enemy Leader to 0 to shatter their Spirit Jar.
 - Each player brings a separate 10-card deck. The player deck and AI deck shuffle together into one Draw Jar.
 - **Bound** cards are ghosts you brought. **Borrowed** cards are ghosts the opponent brought but you are using.
+- Bound/Borrowed now changes card behavior. Bound cards usually reward your claim; Borrowed cards still work but may pay the original binder.
 - Control can change, but claim stays: a ghost on the opponent field may still be Bound to you.
 - Draw 1 card per turn. Maximum hand size is 5.
 - Psy refills by round: round 1 = 1/1, round 2 = 2/2, round 3 = 3/3, up to 10/10.
@@ -21,18 +22,18 @@ Spirit Jar is a single-player prototype card battler: **Player 1 vs Spirit Lord 
 
 ## Prototype card roles
 
-- Bite Ghost: fragile 1-cost pressure that can slip past token-only boards.
-- Spear Ghost: clean 2-cost attacker for early board pressure.
-- Lantern Ghost: Wisp generator with improved early attack.
-- Possessor Ghost: reclaims a damaged ghost Bound to you from the enemy field; Developed ghosts return ready with +1 ATK this turn.
-- Oathbreaker Ghost: sacrifices a ghost Bound to you from either field to damage the enemy Leader; enemy-field and Developed sacrifices hit harder, and Developed sacrifices draw a card.
-- Grave Caller: returns a defeated non-Bomb ghost Bound to you from discard to hand; Developed echoes refund 1 Psy.
-- Loud Ghost: splash and board chip.
+- Bite Ghost: fragile 1-cost pressure. Bound Bite steals current Psy on Leader hit; Borrowed Bite pays bonus Psy back to the original binder.
+- Spear Ghost: clean 2-cost attacker. Bound Spear pierces 1 Leader damage through defeated non-token spirits.
+- Lantern Ghost: Wisp generator. Bound Lantern creates ready Wisps; Borrowed Lantern creates Wisps still Bound to the original binder.
+- Possessor Ghost: Bound mode reclaims damaged Bound ghosts; Borrowed mode swaps places with a damaged enemy ghost.
+- Oathbreaker Ghost: sacrifices a ghost Bound to you from either field to damage the enemy Leader; Borrowed Oathbreaker pays bonus Psy back to the original binder.
+- Grave Caller: returns a defeated non-Bomb ghost Bound to you from discard to hand; Borrowed Grave Caller pays bonus Psy back to the original binder.
+- Loud Ghost: splash and board chip. Bound Loud can pass 1 damage through defeated spirits to the Leader.
 - Bones Ghost: cheaper 2-cost recursion fuel with lower HP.
 - Tank Ghost: large HP wall.
-- Fog Ghost: cheap Taunt blocker; draws 1 if you are badly outnumbered on Manifest.
-- Bomb Ghost: board damage, 1 damage to both Leaders, and emergency Hold blast.
-- Ritual Ghost: sacrifice payoff and revive Hold.
+- Fog Ghost: cheap Taunt blocker; Bound Fog scares attackers and reduces incoming damage by 1.
+- Bomb Ghost: board damage and emergency Hold blast. Bound Bomb protects your Bound spirits by 1; Borrowed Bomb deals 2 to both Leaders.
+- Ritual Ghost: sacrifice payoff and revive Hold. Bound Ritual draws from Developed sacrifices; Borrowed Ritual can pay bonus Psy back to the original binder.
 
 ## Development
 

@@ -91,6 +91,21 @@ const KEYWORD_INFO: Record<Keyword, { label: string; color: string; desc: string
     label: 'CALLER',
     color: 'bg-teal-500/20 text-teal-200 border-teal-300/40',
     desc: 'Returns defeated Bound ghosts to your hand.'
+  },
+  swap: {
+    label: 'SWAP',
+    color: 'bg-violet-500/20 text-violet-200 border-violet-300/40',
+    desc: 'Can trade positions or control with another spirit.'
+  },
+  fear: {
+    label: 'FEAR',
+    color: 'bg-slate-500/20 text-slate-200 border-slate-300/40',
+    desc: 'Scares spirits, lowering or disrupting their attack.'
+  },
+  pierce: {
+    label: 'PIERCE',
+    color: 'bg-orange-500/20 text-orange-200 border-orange-300/40',
+    desc: 'Damage can pass through a defeated defender to the Leader.'
   }
 };
 

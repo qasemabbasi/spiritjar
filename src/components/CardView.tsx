@@ -43,6 +43,16 @@ function CardRulesText({ card, compact = false }: { card: CardDefinition; compac
           <span className="font-bold text-amber-400">HOLD:</span> {card.holdText}
         </div>
       )}
+      {card.boundText && (
+        <div>
+          <span className="font-bold text-cyan-300">BOUND:</span> {card.boundText}
+        </div>
+      )}
+      {card.borrowedText && (
+        <div>
+          <span className="font-bold text-fuchsia-300">BORROWED:</span> {card.borrowedText}
+        </div>
+      )}
     </div>
   );
 }

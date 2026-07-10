@@ -152,6 +152,8 @@ export function FieldUnitView({
           {cardDef.attackText && <div><span className="font-bold text-rose-400">ATTACK:</span> {cardDef.attackText}</div>}
           {cardDef.defeatText && <div><span className="font-bold text-slate-400">DEFEAT:</span> {cardDef.defeatText}</div>}
           {cardDef.hasHold && <div><span className="font-bold text-amber-400">HOLD:</span> {cardDef.holdText}</div>}
+          {cardDef.boundText && <div><span className="font-bold text-cyan-300">BOUND:</span> {cardDef.boundText}</div>}
+          {cardDef.borrowedText && <div><span className="font-bold text-fuchsia-300">BORROWED:</span> {cardDef.borrowedText}</div>}
         </div>
       </div>
     </div>

@@ -15,7 +15,10 @@ export type Keyword =
   | 'fog'
   | 'possess'
   | 'oath'
-  | 'caller';
+  | 'caller'
+  | 'swap'
+  | 'fear'
+  | 'pierce';
 
 export type HoldTrigger = 
   | 'when_attacked' 
@@ -46,6 +49,8 @@ export interface CardDefinition {
   hasHold: boolean;
   token: boolean;
   role?: string;
+  boundText?: string;
+  borrowedText?: string;
   artKey: string;
   themeColor: string;
 }
