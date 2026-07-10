@@ -2,6 +2,7 @@ import { FieldSpirit } from '../types';
 import { BASE_CARDS } from '../data/cards';
 import { GhostIcon } from './GhostIcon';
 import { KeywordChip } from './KeywordChip';
+import { CardRulesText } from './CardView';
 
 interface FieldUnitViewProps {
   key?: string | number;
@@ -151,15 +152,8 @@ export function FieldUnitView({
         <div className="mb-2 text-[10px] text-slate-400">
           Current: {spirit.currentHp}/{spirit.maxHp} HP • {spirit.atk} ATK{spirit.developed ? ' • DEVELOPED' : ''}{spirit.scared ? ' • SCARED' : ''}{ownershipLabel ? ` • ${ownershipLabel}` : ''}
         </div>
-        <div className="space-y-1 text-[10px] leading-tight text-slate-200">
-          {cardDef.manifestText && <div><span className="font-bold text-cyan-400">MANIFEST:</span> {cardDef.manifestText}</div>}
-          {cardDef.fieldText && <div><span className="font-bold text-indigo-300">FIELD:</span> {cardDef.fieldText}</div>}
-          {cardDef.attackText && <div><span className="font-bold text-rose-400">ATTACK:</span> {cardDef.attackText}</div>}
-          {cardDef.defeatText && <div><span className="font-bold text-slate-400">DEFEAT:</span> {cardDef.defeatText}</div>}
-          {cardDef.hasHold && <div><span className="font-bold text-amber-400">HOLD:</span> {cardDef.holdText}</div>}
-          {cardDef.boundText && <div><span className="font-bold text-cyan-300">BOUND:</span> {cardDef.boundText}</div>}
-          {cardDef.borrowedText && <div><span className="font-bold text-fuchsia-300">BORROWED:</span> {cardDef.borrowedText}</div>}
-          {cardDef.developedText && <div><span className="font-bold text-violet-300">DEVELOPED:</span> {cardDef.developedText}</div>}
+        <div className="text-[10px] leading-tight text-slate-200">
+          <CardRulesText card={cardDef} compact />
         </div>
       </div>
     </div>

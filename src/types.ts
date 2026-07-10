@@ -45,6 +45,7 @@ export interface CardDefinition {
   fieldText: string;
   attackText: string;
   defeatText: string;
+  defenseText?: string;
   holdText: string;
   holdTrigger?: HoldTrigger;
   hasHold: boolean;

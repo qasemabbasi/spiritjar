@@ -29,11 +29,11 @@ Minimal monster battler, but with ridiculous ghost swings:
 - Combat has no Defense stat. Attack damage equals ATK.
 - Hold cards only become playable when they have a legal target.
 
-## Current big-swing card roles
+## Current active cards
 
 - Bite Ghost: fragile 1-cost pressure. Bound Bite steals current Psy on Leader hit. Developed Bite becomes nasty Oathbreaker fuel.
 - Spear Ghost: clean 2-cost attacker. Bound Spear pierces 1 Leader damage through defeated non-token spirits. Developed Spear scares another enemy after a kill.
-- Lantern Ghost: Wisp generator. Bound Lantern creates ready Wisps. Borrowed Lantern creates Wisps still Bound to the original binder. Developed Lantern keeps feeding the board.
+- Lantern Ghost: summons Wisps. Its attacks apply Burn 1 to surviving spirits. Bound Lantern creates ready Wisps. Borrowed Lantern creates Wisps still Bound to the original binder. Developed Lantern keeps feeding the board.
 - Loud Ghost: board chip and splash. Bound Loud passes damage through kills. Developed Loud scares damaged enemies after splash.
 - Bones Ghost: cheap 2-cost recursion fuel with lower HP. Developed Bones draws 1 when defeated or sacrificed; if sacrificed, it also leaves a Bone Pile.
 - Fog Ghost: cheap Taunt. The first attack against Bound Fog passes through for 0 damage and scares the attacker.
@@ -41,7 +41,7 @@ Minimal monster battler, but with ridiculous ghost swings:
 - Oathbreaker Ghost: sacrifices a ghost Bound to you from either field. Developed sacrifices add +2 broken-oath damage, and enemy-field sacrifices add +1 more. It no longer draws by itself; Bones carries the sacrifice payoff.
 - Grave Caller: calls back defeated non-Bomb Bound ghosts. If the recalled ghost died Developed and there is field space, it manifests exhausted instead of going to hand.
 - Bomb Ghost: board reset and emergency Hold blast. Bound Bomb protects your Bound spirits by 1. Borrowed Bomb hits both Leaders harder. Survivors are scared.
-- Ritual Ghost: sacrifice payoff and revive Hold. Still experimental.
+- Ritual Ghost: sacrifice payoff and revive Hold. It can attack on the turn it is Manifested, and attacks into spirits spill half damage rounded up to the enemy Leader.
 
 ## Active pool note
 
@@ -61,3 +61,7 @@ npm run build
 ```
 
 The app is a Vite + React project and can be deployed to Vercel with the default Vite settings.
+
+## Card text format
+
+Card details now use the same section order everywhere: Manifest Effect, Hold Effect, Attack Effect, Defense Effect, Defeat Effect, then Bound, Borrowed, and Developed. Role/Field text has been removed from the UI.

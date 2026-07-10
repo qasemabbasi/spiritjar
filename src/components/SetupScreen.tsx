@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { BASE_CARDS, COLLECTIBLE_CARD_IDS, DECK_SIZE, getStandardPlayerCollection, getDefaultSelectedDeck, getDefaultOpponentDeck } from '../data/cards';
 import { CardDefinition } from '../types';
-import { CardView } from './CardView';
+import { CardRulesText, CardView } from './CardView';
 import { sounds } from '../utils/audio';
 
 interface SetupScreenProps {
@@ -34,19 +34,8 @@ function SetupCardDetail({ card }: { card: CardDefinition | null }) {
         <div><span className="font-black text-orange-400">{card.atk}</span><span className="ml-1 text-slate-500">ATK</span></div>
       </div>
 
-      <div className="space-y-2 text-xs leading-snug text-slate-200">
-        {card.role && <div><span className="font-black text-violet-300">ROLE:</span> {card.role}</div>}
-        {card.manifestText && <div><span className="font-black text-cyan-400">MANIFEST:</span> {card.manifestText}</div>}
-        {card.fieldText && <div><span className="font-black text-indigo-300">FIELD:</span> {card.fieldText}</div>}
-        {card.attackText && <div><span className="font-black text-rose-400">ATTACK:</span> {card.attackText}</div>}
-        {card.defeatText && <div><span className="font-black text-slate-400">DEFEAT:</span> {card.defeatText}</div>}
-        {card.hasHold && <div><span className="font-black text-amber-400">HOLD:</span> {card.holdText}</div>}
-        {card.boundText && <div><span className="font-black text-cyan-300">BOUND:</span> {card.boundText}</div>}
-        {card.borrowedText && <div><span className="font-black text-fuchsia-300">BORROWED:</span> {card.borrowedText}</div>}
-        {card.developedText && <div><span className="font-black text-violet-300">DEVELOPED:</span> {card.developedText}</div>}
-        {!card.manifestText && !card.fieldText && !card.attackText && !card.defeatText && !card.hasHold && !card.role && !card.boundText && !card.borrowedText && !card.developedText && (
-          <div className="text-slate-400">No special rules.</div>
-        )}
+      <div className="text-xs leading-snug text-slate-200">
+        <CardRulesText card={card} compact />
       </div>
     </div>
   );
@@ -162,6 +151,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
               <div><span className="font-black text-purple-200">SCARED</span> = this ghost cannot attack during its next attack phase, then recovers.</div>
               <div><span className="font-black text-indigo-200">POSSESS</span> = reclaim or steal control of a damaged ghost. Claim and control are different.</div>
               <div><span className="font-black text-orange-200">PIERCE / SPILL</span> = damage gets past a defender and still hits the Leader.</div>
+              <div><span className="font-black text-red-200">BURN</span> = damage at the start of that ghost's controller's turn, then the Burn count drops by 1.</div>
             </div>
             <SetupCardDetail card={previewCard} />
           </div>

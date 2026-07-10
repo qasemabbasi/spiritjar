@@ -15,34 +15,45 @@ interface CardViewProps {
   compact?: boolean;
 }
 
-function CardRulesText({ card, compact = false }: { card: CardDefinition; compact?: boolean }) {
+export function CardRulesText({ card, compact = false }: { card: CardDefinition; compact?: boolean }) {
+  const rowClass = compact ? 'text-[10px]' : 'text-[8.5px]';
+  const hasCoreRules = Boolean(card.manifestText || card.holdText || card.attackText || card.defenseText || card.defeatText);
+  const hasClaimRules = Boolean(card.boundText || card.borrowedText);
+  const hasDevelopedRules = Boolean(card.developedText);
+
+  if (!hasCoreRules && !hasClaimRules && !hasDevelopedRules) {
+    return <div className="text-slate-400">No special rules.</div>;
+  }
+
   return (
-    <div className={`${compact ? 'text-[10px]' : 'text-[8.5px]'} leading-tight space-y-1.5 text-slate-200`}>
+    <div className={`${rowClass} leading-tight space-y-1.5 text-slate-200`}>
       {card.manifestText && (
         <div>
-          <span className="font-bold text-cyan-400">MANIFEST:</span> {card.manifestText}
+          <span className="font-bold text-cyan-400">MANIFEST EFFECT:</span> {card.manifestText}
         </div>
       )}
-      {card.fieldText && (
+      {card.hasHold && card.holdText && (
         <div>
-          <span className="font-bold text-indigo-300">FIELD:</span> {card.fieldText}
+          <span className="font-bold text-amber-400">HOLD EFFECT:</span> {card.holdText}
         </div>
       )}
       {card.attackText && (
         <div>
-          <span className="font-bold text-rose-400">ATTACK:</span> {card.attackText}
+          <span className="font-bold text-rose-400">ATTACK EFFECT:</span> {card.attackText}
+        </div>
+      )}
+      {card.defenseText && (
+        <div>
+          <span className="font-bold text-indigo-300">DEFENSE EFFECT:</span> {card.defenseText}
         </div>
       )}
       {card.defeatText && (
         <div>
-          <span className="font-bold text-slate-400">DEFEAT:</span> {card.defeatText}
+          <span className="font-bold text-slate-400">DEFEAT EFFECT:</span> {card.defeatText}
         </div>
       )}
-      {card.hasHold && (
-        <div>
-          <span className="font-bold text-amber-400">HOLD:</span> {card.holdText}
-        </div>
-      )}
+
+      {hasClaimRules && <div className="my-1 border-t border-slate-700/70" />}
       {card.boundText && (
         <div>
           <span className="font-bold text-cyan-300">BOUND:</span> {card.boundText}
@@ -51,6 +62,13 @@ function CardRulesText({ card, compact = false }: { card: CardDefinition; compac
       {card.borrowedText && (
         <div>
           <span className="font-bold text-fuchsia-300">BORROWED:</span> {card.borrowedText}
+        </div>
+      )}
+
+      {hasDevelopedRules && <div className="my-1 border-t border-slate-700/70" />}
+      {card.developedText && (
+        <div>
+          <span className="font-bold text-violet-300">DEVELOPED:</span> {card.developedText}
         </div>
       )}
     </div>
@@ -142,22 +160,17 @@ export function CardView({
             </div>
           ) : (
             <div className="text-[8.5px] leading-tight bg-indigo-950/60 p-1.5 rounded flex-1 overflow-y-auto border border-indigo-900/40 text-slate-200">
-              <CardRulesText card={card} />
-              {card.hasHold && (
-                <div
-                  onClick={e => {
-                    if (isHoldReady && onHoldClick) {
-                      e.stopPropagation();
-                      onHoldClick();
-                    }
-                  }}
-                  className={`mt-1 p-1 rounded ${
-                    isHoldReady ? 'bg-cyan-500/20 border border-cyan-400/60 text-cyan-200 font-semibold' : 'opacity-80'
-                  }`}
-                >
-                  <span className="font-bold text-amber-400">HOLD:</span> {card.holdText}
-                </div>
-              )}
+              <div
+                onClick={e => {
+                  if (isHoldReady && onHoldClick) {
+                    e.stopPropagation();
+                    onHoldClick();
+                  }
+                }}
+                className={isHoldReady ? 'rounded bg-cyan-500/10 p-1 ring-1 ring-cyan-400/50' : ''}
+              >
+                <CardRulesText card={card} />
+              </div>
             </div>
           )}
         </div>

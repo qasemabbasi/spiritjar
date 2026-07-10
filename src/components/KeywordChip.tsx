@@ -35,7 +35,7 @@ const KEYWORD_INFO: Record<Keyword, { label: string; color: string; desc: string
   cat: {
     label: 'CAT',
     color: 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-400/40',
-    desc: 'Cannot be targeted by non-Cat attacks. Can attack Leaders.'
+    desc: 'Legacy evasive spirit.'
   },
   bite: {
     label: 'BITE',

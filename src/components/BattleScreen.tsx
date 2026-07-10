@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { CardDefinition, CardInstance, FieldSpirit, PlayerState, TurnPhase, GameLogEntry, ReactionContext } from '../types';
 import { BASE_CARDS, DECK_SIZE } from '../data/cards';
-import { CardView } from './CardView';
+import { CardRulesText, CardView } from './CardView';
 import { FieldUnitView } from './FieldUnitView';
 import { sounds } from '../utils/audio';
 import confetti from 'canvas-confetti';
@@ -366,18 +366,8 @@ function CardDetailPreview({ card }: { card: CardDefinition | null }) {
         <div><span className="font-black text-orange-400">{card.atk}</span><span className="ml-1 text-slate-500">ATK</span></div>
       </div>
 
-      <div className="space-y-2 text-[12px] leading-snug text-slate-200">
-        {card.manifestText && <div><span className="font-black text-cyan-400">MANIFEST:</span> {card.manifestText}</div>}
-        {card.fieldText && <div><span className="font-black text-indigo-300">FIELD:</span> {card.fieldText}</div>}
-        {card.attackText && <div><span className="font-black text-rose-400">ATTACK:</span> {card.attackText}</div>}
-        {card.defeatText && <div><span className="font-black text-slate-400">DEFEAT:</span> {card.defeatText}</div>}
-        {card.hasHold && <div><span className="font-black text-amber-400">HOLD:</span> {card.holdText}</div>}
-        {card.boundText && <div><span className="font-black text-cyan-300">BOUND:</span> {card.boundText}</div>}
-        {card.borrowedText && <div><span className="font-black text-fuchsia-300">BORROWED:</span> {card.borrowedText}</div>}
-        {card.developedText && <div><span className="font-black text-violet-300">DEVELOPED:</span> {card.developedText}</div>}
-        {!card.manifestText && !card.fieldText && !card.attackText && !card.defeatText && !card.hasHold && !card.boundText && !card.borrowedText && !card.developedText && (
-          <div className="text-slate-400">No special rules.</div>
-        )}
+      <div className="text-[12px] leading-snug text-slate-200">
+        <CardRulesText card={card} compact />
       </div>
 
     </div>
@@ -507,6 +497,9 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         if (sourceCardId === 'flame_ghost' && damage > 0 && updated.currentHp > 0) {
           updated.burn = Math.min(MAX_BURN, updated.burn + FLAME_BURN_AMOUNT);
         }
+        if (sourceCardId === 'lantern_ghost' && damage > 0 && updated.currentHp > 0) {
+          updated.burn = Math.min(MAX_BURN, updated.burn + 1);
+        }
         return updated;
       });
       return copy;
@@ -591,7 +584,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     const atkCard = BASE_CARDS[attacker.cardId];
 
     if (defender.keywords.includes('cat') && !attacker.keywords.includes('cat')) {
-      addLog('🛡️ Cat Ghost cannot be targeted by non-Cat normal attacks.', 'effect');
+      addLog('🛡️ That ghost cannot be targeted by this normal attack.', 'effect');
       return;
     }
 
@@ -642,6 +635,10 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
       addLog(`🔥 Flame Ghost applied Burn ${FLAME_BURN_AMOUNT} to ${defCard.name}!`, 'effect');
     }
 
+    if (attacker.cardId === 'lantern_ghost' && targetSurvives) {
+      addLog(`🏮 Lantern Ghost lights ${defCard.name} with Burn 1.`, 'effect');
+    }
+
     if (targetDefeated && attacker.cardId === 'spear_ghost' && attacker.originalOwner === attackerPlayerIdx && !defender.keywords.includes('token')) {
       addLog(`🪡 Bound Spear pierces past ${defCard.name} for 1 Leader damage!`, 'effect');
       setPlayers(prev => {
@@ -677,7 +674,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     }
 
     if (attacker.keywords.includes('splash')) {
-      addLog('💥 Splash 1! Other enemy spirits take 1 damage. Splash can hit Cats.', 'effect');
+      addLog('💥 Splash 1! Other enemy spirits take 1 damage.', 'effect');
       players[defenderPlayerIdx].field.forEach(unit => {
         if (unit.instanceId === defender.instanceId) return;
         applyDamageToSpirit(defenderPlayerIdx, unit.instanceId, 1, undefined, true);
@@ -1015,7 +1012,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
 
       if (def.id === 'bomb_ghost') {
         const leaderDamage = isBoundManifest ? 1 : 2;
-        addLog(`💣 Bomb Ghost explodes for 4 damage to every spirit and ${leaderDamage} damage to both Leaders! ${isBoundManifest ? 'Your Bound ghosts duck for -1 blast damage.' : 'Borrowed Bomb is unstable!'} This can hit Cats.`, 'effect');
+        addLog(`💣 Bomb Ghost explodes for 4 damage to every spirit and ${leaderDamage} damage to both Leaders! ${isBoundManifest ? 'Your Bound ghosts duck for -1 blast damage.' : 'Borrowed Bomb is unstable!'}`, 'effect');
         sounds.playBurn();
         copy.forEach((boardPlayer, boardIdx) => {
           boardPlayer.field = boardPlayer.field.map(unit => {
@@ -1345,7 +1342,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
 
     const attacker = player.field.find(unit => unit.instanceId === attackerId && unit.currentHp > 0);
     if (!attacker || attacker.keywords.includes('cat') || attacker.swordBuffedThisTurn) {
-      addLog('⚠️ Sword Ghost can only empower a selected non-Cat attacker once per turn.', 'system');
+      addLog('⚠️ Sword Ghost can only empower a selected attacker once per turn.', 'system');
       return false;
     }
 
