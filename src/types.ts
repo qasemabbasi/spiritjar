@@ -68,7 +68,9 @@ export interface FieldSpirit {
   burn: number; // 0 if none, 1 if Burn 1
   originalOwner: number;
   swordBuffedThisTurn?: boolean;
+  developed: boolean;
 }
+
 
 export type TurnPhase = 'start' | 'draw' | 'main' | 'attack' | 'react' | 'end';
 

@@ -50,7 +50,8 @@ function makeSpirit(instance: CardInstance, turnCount: number, currentPlayer: 0 
     summonedTurn: turnCount,
     burn: 0,
     originalOwner: instance.originalOwner ?? currentPlayer,
-    swordBuffedThisTurn: false
+    swordBuffedThisTurn: false,
+    developed: false
   };
 }
 
@@ -552,7 +553,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
               canAttackThisTurn: false,
               summonedTurn: turnCount,
               burn: 0,
-              originalOwner: dead.originalOwner
+              originalOwner: dead.originalOwner,
+              developed: false
             });
           } else if (!dead.keywords.includes('token')) {
             setDiscardPile(dp => [...dp, { instanceId: dead.instanceId, cardId: dead.cardId, originalOwner: dead.originalOwner }]);
@@ -753,19 +755,27 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
             atk: BASE_CARDS.bones_ghost.atk,
             keywords: [...BASE_CARDS.bones_ghost.keywords],
             canAttackThisTurn: false,
-            burn: 0
+            summonedTurn: turnCount,
+            burn: 0,
+            developed: false
           };
         }
         return unit;
       });
 
-      // Existing non-token units ready up after start effects. New/revived units stay exhausted.
-      active.field = active.field.map(unit => ({
-        ...unit,
-        atk: BASE_CARDS[unit.cardId]?.atk ?? unit.atk,
-        swordBuffedThisTurn: false,
-        canAttackThisTurn: unit.summonedTurn < turnCount && (BASE_CARDS[unit.cardId]?.atk ?? unit.atk) > 0 && unit.cardId !== 'bone_pile_token'
-      }));
+      // Existing non-token units develop and ready up after start effects.
+      // A Developed ghost is one that survived until the start of its controller's next turn.
+      active.field = active.field.map(unit => {
+        const baseAtk = BASE_CARDS[unit.cardId]?.atk ?? unit.atk;
+        const isExistingNonToken = unit.summonedTurn < turnCount && !unit.keywords.includes('token') && unit.cardId !== 'bone_pile_token';
+        return {
+          ...unit,
+          atk: baseAtk,
+          swordBuffedThisTurn: false,
+          developed: unit.developed || isExistingNonToken,
+          canAttackThisTurn: isExistingNonToken && baseAtk > 0
+        };
+      });
 
       return copy;
     });
@@ -795,7 +805,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           canAttackThisTurn: false,
           summonedTurn: turnCount,
           burn: 0,
-          originalOwner: playerIdx
+          originalOwner: playerIdx,
+          developed: false
         });
       }
 
@@ -909,12 +920,31 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         const sacrifice = targets[0];
         if (sacrifice) {
           const sacrificedName = BASE_CARDS[sacrifice.unit.cardId].name;
-          const damage = Math.max(1, sacrifice.unit.atk);
+          const fromEnemyField = sacrifice.controllerIdx === enemyIdx;
+          const wasDeveloped = !!sacrifice.unit.developed;
+          const damage = Math.max(1, sacrifice.unit.atk) + (fromEnemyField ? 1 : 0);
           copy[sacrifice.controllerIdx].field = copy[sacrifice.controllerIdx].field.filter(unit => unit.instanceId !== sacrifice.unit.instanceId);
           copy[enemyIdx].leaderHp -= damage;
           setDiscardPile(dp => [...dp, { instanceId: sacrifice.unit.instanceId, cardId: sacrifice.unit.cardId, originalOwner: sacrifice.unit.originalOwner }]);
           addLog(`🪦 Oathbreaker sacrifices ${sacrificedName} Bound to ${player.name} from ${copy[sacrifice.controllerIdx].name}'s field.`, 'effect');
+          if (fromEnemyField) addLog('🔗 The stolen bond snaps back for +1 damage!', 'effect');
           addLog(`💔 ${sacrificedName}'s broken oath deals ${damage} damage to ${copy[enemyIdx].name}'s Leader!`, 'attack');
+
+          if (wasDeveloped) {
+            addLog(`🌙 Developed ${sacrificedName} leaves a stronger echo. ${player.name} draws 1 card.`, 'effect');
+            let currentDeck = [...sharedDeck];
+            let currentDiscard = [...discardPile];
+            const reshuffled = checkReshuffle(currentDeck, currentDiscard);
+            currentDeck = reshuffled.newDeck;
+            currentDiscard = reshuffled.newDiscard;
+            setDiscardPile(currentDiscard);
+            if (currentDeck.length > 0 && player.hand.length < HAND_LIMIT) {
+              const drawn = currentDeck[0];
+              player.hand = [...player.hand, drawn];
+              setSharedDeck(currentDeck.slice(1));
+              addLog(`🃏 ${player.name} drew ${BASE_CARDS[drawn.cardId].name} from the broken oath.`, 'turn');
+            }
+          }
         }
       }
 
@@ -928,8 +958,9 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           .sort((a, b) => (BASE_CARDS[b.cardId].cost - BASE_CARDS[a.cardId].cost) || b.atk - a.atk)[0];
         if (reclaimTarget && player.field.length < FIELD_LIMIT) {
           copy[enemyIdx].field = copy[enemyIdx].field.filter(unit => unit.instanceId !== reclaimTarget.instanceId);
-          player.field = [...player.field, { ...reclaimTarget, canAttackThisTurn: false, summonedTurn: turnCount }];
+          player.field = [...player.field, { ...reclaimTarget, canAttackThisTurn: !!reclaimTarget.developed && reclaimTarget.atk > 0, summonedTurn: reclaimTarget.developed ? reclaimTarget.summonedTurn : turnCount }];
           addLog(`👻 Possessor Ghost reclaims ${BASE_CARDS[reclaimTarget.cardId].name} from ${copy[enemyIdx].name}'s field because it is Bound to ${player.name}.`, 'effect');
+          if (reclaimTarget.developed) addLog(`🌙 Developed ${BASE_CARDS[reclaimTarget.cardId].name} is ready after being reclaimed.`, 'effect');
         } else if (reclaimTarget) {
           addLog('⚠️ Possessor Ghost found a Bound target, but your field has no room to reclaim it.', 'system');
         } else {
@@ -939,7 +970,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
 
       if (def.id === 'grave_caller') {
         const recalled = [...discardPile]
-          .filter(card => card.originalOwner === currentPlayer && !BASE_CARDS[card.cardId].token)
+          .filter(card => card.originalOwner === currentPlayer && card.cardId !== 'bomb_ghost' && !BASE_CARDS[card.cardId].token)
           .sort((a, b) => BASE_CARDS[b.cardId].cost - BASE_CARDS[a.cardId].cost)[0];
         if (recalled && player.hand.length < HAND_LIMIT) {
           player.hand = [...player.hand, recalled];
@@ -970,7 +1001,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           canAttackThisTurn: false,
           summonedTurn: turnCount,
           burn: 0,
-          originalOwner: currentPlayer
+          originalOwner: currentPlayer,
+          developed: false
         });
       }
 
@@ -1278,7 +1310,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
             canAttackThisTurn: false,
             summonedTurn: turnCount,
             burn: 0,
-            originalOwner: cardInst.originalOwner
+            originalOwner: cardInst.originalOwner,
+            developed: false
           });
         }
         return copy;
@@ -1330,7 +1363,8 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
             canAttackThisTurn: false,
             summonedTurn: turnCount,
             burn: 0,
-            originalOwner: cardInst.originalOwner
+            originalOwner: cardInst.originalOwner,
+            developed: false
           });
         }
         return copy;

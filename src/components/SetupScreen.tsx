@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BASE_CARDS, getStandardPlayerCollection, getDefaultSelectedDeck, getDefaultOpponentDeck } from '../data/cards';
+import { BASE_CARDS, COLLECTIBLE_CARD_IDS, getStandardPlayerCollection, getDefaultSelectedDeck, getDefaultOpponentDeck } from '../data/cards';
 import { CardDefinition } from '../types';
 import { CardView } from './CardView';
 import { sounds } from '../utils/audio';
@@ -81,7 +81,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
     onComplete(selectedDeck, getDefaultOpponentDeck(), true);
   };
 
-  const uniqueCards = Object.values(BASE_CARDS).filter(c => !c.token);
+  const uniqueCards = COLLECTIBLE_CARD_IDS.map(cardId => BASE_CARDS[cardId]).filter(Boolean);
   const previewCard = previewCardId ? BASE_CARDS[previewCardId] : null;
 
   return (

@@ -12,6 +12,7 @@ Spirit Jar is a single-player prototype card battler: **Player 1 vs Spirit Lord 
 - Psy refills by round: round 1 = 1/1, round 2 = 2/2, round 3 = 3/3, up to 10/10.
 - Manifest 1 ghost per turn by paying its Psy cost.
 - Each player has 3 field slots.
+- A ghost becomes **Developed** if it survives until the start of its controller's next turn.
 - Each ready spirit can attack once per turn.
 - Enemy spirits protect the Leader. Clear enemy spirits before attacking the Leader, except Bite Ghost can slip past token-only boards.
 - Combat has no Defense stat. Attack damage equals ATK.
@@ -24,9 +25,9 @@ Spirit Jar is a single-player prototype card battler: **Player 1 vs Spirit Lord 
 - Spear Ghost: clean 2-cost attacker for early board pressure.
 - Soldier Ghost: Taunt protector.
 - Lantern Ghost: Wisp generator with improved early attack.
-- Possessor Ghost: reclaims a damaged ghost Bound to you from the enemy field.
-- Oathbreaker Ghost: sacrifices a ghost Bound to you from either field to damage the enemy Leader.
-- Grave Caller: returns a defeated ghost Bound to you from discard to hand.
+- Possessor Ghost: reclaims a damaged ghost Bound to you from the enemy field; Developed ghosts return ready.
+- Oathbreaker Ghost: sacrifices a ghost Bound to you from either field to damage the enemy Leader; enemy-field sacrifices hit harder and Developed sacrifices draw a card.
+- Grave Caller: returns a defeated non-Bomb ghost Bound to you from discard to hand.
 - Old Ghost: healing and bonus Psy on defeat.
 - Loud Ghost: splash and board chip.
 - Bones Ghost: Bone Pile recursion.
