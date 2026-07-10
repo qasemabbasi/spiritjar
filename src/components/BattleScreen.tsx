@@ -46,7 +46,7 @@ function makeSpirit(instance: CardInstance, turnCount: number, currentPlayer: 0 
     maxHp: def.hp,
     atk: def.atk,
     keywords: [...def.keywords],
-    canAttackThisTurn: def.keywords.includes('rush'),
+    canAttackThisTurn: def.keywords.includes('rush') || def.id === 'ritual_ghost',
     summonedTurn: turnCount,
     burn: 0,
     originalOwner: instance.originalOwner ?? currentPlayer,
@@ -619,6 +619,25 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
     const targetDefeated = defender.currentHp - damage <= 0;
     applyDamageToSpirit(defenderPlayerIdx, defender.instanceId, damage, targetSurvives ? attacker.cardId : undefined, true);
 
+    if (attacker.cardId === 'spear_ghost' && attacker.originalOwner !== attackerPlayerIdx) {
+      addLog(`🔗 Borrowed Spear bites back and deals 1 damage to ${players[attackerPlayerIdx].name}'s Leader.`, 'effect');
+      setPlayers(prev => {
+        const copy = clonePlayers(prev);
+        copy[attackerPlayerIdx].leaderHp -= 1;
+        return copy;
+      });
+    }
+
+    if (attacker.cardId === 'ritual_ghost' && damage > 0) {
+      const spillDamage = Math.ceil(damage / 2);
+      addLog(`🕯️ Ritual Ghost spills ${spillDamage} soul damage through to ${players[defenderPlayerIdx].name}'s Leader.`, 'effect');
+      setPlayers(prev => {
+        const copy = clonePlayers(prev);
+        copy[defenderPlayerIdx].leaderHp -= spillDamage;
+        return copy;
+      });
+    }
+
     if (attacker.cardId === 'flame_ghost' && targetSurvives) {
       addLog(`🔥 Flame Ghost applied Burn ${FLAME_BURN_AMOUNT} to ${defCard.name}!`, 'effect');
     }
@@ -701,6 +720,10 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           copy[attacker.originalOwner].bonusPsyNextTurn = (copy[attacker.originalOwner].bonusPsyNextTurn || 0) + 1;
           addLog(`🔗 Borrowed Bite snaps back. ${copy[attacker.originalOwner].name} steals +1 bonus Psy next turn.`, 'effect');
         }
+      }
+      if (attacker.cardId === 'spear_ghost' && attacker.originalOwner !== attackerPlayerIdx) {
+        copy[attackerPlayerIdx].leaderHp -= 1;
+        addLog(`🔗 Borrowed Spear bites back and deals 1 damage to ${copy[attackerPlayerIdx].name}'s Leader.`, 'effect');
       }
       return copy;
     });
@@ -1751,24 +1774,56 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
   };
 
   const unitCardClass = '!w-28 !h-40 lg:!w-32 lg:!h-44';
+  const battleLogText = log.map(entry => `[${entry.timestamp}] ${entry.type.toUpperCase()}: ${entry.text}`).join('\n');
+  const copyBattleLog = () => {
+    navigator.clipboard?.writeText(battleLogText);
+  };
 
   return (
     <div className="flex flex-col min-h-[620px] w-full max-w-[1500px] mx-auto bg-[#0f172a] text-slate-100 font-sans overflow-visible border-4 sm:border-8 border-[#1e293b] rounded-2xl shadow-2xl relative select-none">
       {winner && (
-        <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-8 animate-fade-in">
-          <div className="text-8xl mb-4 animate-bounce">🏆</div>
-          <h2 className="text-5xl font-black text-cyan-400 tracking-tighter uppercase mb-2">
-            {winner.name} WINS!
-          </h2>
-          <p className="text-slate-300 font-mono text-sm max-w-md text-center mb-8">
-            The opposing Spirit Jar was shattered! Victory achieved on Turn {turnCount}.
-          </p>
-          <button
-            onClick={onRestart}
-            className="px-8 py-4 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black tracking-wider text-lg uppercase rounded-xl shadow-[0_0_30px_rgba(34,211,238,0.6)] cursor-pointer transition-all hover:scale-105"
-          >
-            Play Again ↺
-          </button>
+        <div className="absolute inset-0 bg-slate-950/92 backdrop-blur-md z-50 flex items-center justify-center p-4 sm:p-8 animate-fade-in overflow-y-auto">
+          <div className="w-full max-w-5xl rounded-3xl border-2 border-cyan-500/40 bg-slate-950/95 p-4 sm:p-6 shadow-[0_0_40px_rgba(34,211,238,0.25)]">
+            <div className="flex flex-col items-center text-center">
+              <div className="text-6xl sm:text-7xl mb-3 animate-bounce">🏆</div>
+              <h2 className="text-3xl sm:text-5xl font-black text-cyan-400 tracking-tighter uppercase mb-2">
+                {winner.name} WINS!
+              </h2>
+              <p className="text-slate-300 font-mono text-sm max-w-md text-center mb-5">
+                The opposing Spirit Jar was shattered! Victory achieved on Turn {turnCount}.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3 text-left">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Final Battle Log</div>
+                  <div className="text-[9px] font-mono text-slate-500">Copy this before starting the next match.</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={copyBattleLog}
+                  className="rounded-lg border border-cyan-700 bg-cyan-950/60 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-cyan-300 hover:bg-cyan-900"
+                >
+                  Copy Log
+                </button>
+              </div>
+              <textarea
+                readOnly
+                value={battleLogText}
+                className="h-56 w-full resize-y rounded-xl border border-slate-800 bg-slate-900/80 p-3 font-mono text-[11px] leading-relaxed text-slate-200 outline-none selection:bg-cyan-500 selection:text-slate-950"
+              />
+            </div>
+
+            <div className="mt-5 flex justify-center">
+              <button
+                onClick={onRestart}
+                className="px-8 py-4 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black tracking-wider text-lg uppercase rounded-xl shadow-[0_0_30px_rgba(34,211,238,0.6)] cursor-pointer transition-all hover:scale-105"
+              >
+                Play Again ↺
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -2169,10 +2224,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
           </div>
           <button
             type="button"
-            onClick={() => {
-              const logText = log.map(entry => `[${entry.timestamp}] ${entry.type.toUpperCase()}: ${entry.text}`).join('\n');
-              navigator.clipboard?.writeText(logText);
-            }}
+            onClick={copyBattleLog}
             className="rounded-lg border border-cyan-700 bg-cyan-950/60 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-cyan-300 hover:bg-cyan-900"
           >
             Copy Log
@@ -2180,7 +2232,7 @@ export function BattleScreen({ p1Selected, p2Selected, onRestart }: BattleScreen
         </div>
         <textarea
           readOnly
-          value={log.map(entry => `[${entry.timestamp}] ${entry.type.toUpperCase()}: ${entry.text}`).join('\n')}
+          value={battleLogText}
           className="h-40 w-full resize-y rounded-xl border border-slate-800 bg-slate-900/80 p-3 font-mono text-[11px] leading-relaxed text-slate-200 outline-none selection:bg-cyan-500 selection:text-slate-950"
         />
       </div>

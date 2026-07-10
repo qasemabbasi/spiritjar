@@ -154,10 +154,14 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
 
           <div className="mb-4 rounded-2xl border border-cyan-500/30 bg-slate-950/70 p-3 shadow-[0_0_24px_rgba(34,211,238,0.12)]">
             <div className="mb-2 text-[10px] font-black uppercase tracking-widest text-cyan-400">Full card details</div>
-            <div className="mb-3 rounded-xl border border-fuchsia-500/30 bg-fuchsia-950/20 p-2 text-[10px] leading-snug text-slate-300">
-              <span className="font-black text-cyan-300">BOUND</span> means you brought that ghost into the match.
-              <span className="font-black text-fuchsia-300"> BORROWED</span> means your opponent brought it, but you are using it. Control can change; the bond stays.
-              <span className="font-black text-violet-300"> DEVELOPED</span> means a ghost survived to its controller's next turn and its bigger payoff is online.
+            <div className="mb-3 rounded-xl border border-fuchsia-500/30 bg-fuchsia-950/20 p-3 text-[10px] leading-snug text-slate-300">
+              <div className="mb-2 font-black uppercase tracking-widest text-fuchsia-200">Rules Glossary</div>
+              <div><span className="font-black text-cyan-300">BOUND</span> = you brought that ghost into the match. You keep a claim on it even if the opponent controls it.</div>
+              <div><span className="font-black text-fuchsia-300">BORROWED</span> = your opponent brought it, but you are using it. Borrowed power usually has a backlash or pays the binder.</div>
+              <div><span className="font-black text-violet-300">DEVELOPED</span> = a ghost survived to its controller's next turn. Its bigger payoff is online.</div>
+              <div><span className="font-black text-purple-200">SCARED</span> = this ghost cannot attack during its next attack phase, then recovers.</div>
+              <div><span className="font-black text-indigo-200">POSSESS</span> = reclaim or steal control of a damaged ghost. Claim and control are different.</div>
+              <div><span className="font-black text-orange-200">PIERCE / SPILL</span> = damage gets past a defender and still hits the Leader.</div>
             </div>
             <SetupCardDetail card={previewCard} />
           </div>
