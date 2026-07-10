@@ -77,7 +77,7 @@ export function SetupScreen({ onComplete }: SetupScreenProps) {
   const previewCard = previewCardId ? BASE_CARDS[previewCardId] : null;
 
   return (
-    <div className="flex h-full min-h-0 w-full max-w-6xl mx-auto bg-[#0f172a] text-slate-100 font-sans border-4 sm:border-8 border-[#1e293b] rounded-2xl shadow-2xl overflow-hidden relative">
+    <div className="flex flex-col h-full min-h-0 w-full max-w-6xl mx-auto bg-[#0f172a] text-slate-100 font-sans border-4 sm:border-8 border-[#1e293b] rounded-2xl shadow-2xl overflow-hidden relative">
       <div className="absolute inset-0 bg-gradient-to-br from-indigo-950/30 via-slate-900/10 to-[#0f172a] pointer-events-none" />
 
       {/* Top Header */}
