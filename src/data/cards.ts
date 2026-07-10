@@ -63,15 +63,15 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
     cost: 2,
     hp: 3,
     atk: 3,
-    keywords: ['spear', 'rush'],
+    keywords: ['spear'],
     manifestText: '',
-    fieldText: 'Rush. Can attack enemy spirits on the turn it is Manifested, but cannot attack Leaders until your next turn.',
-    attackText: 'Clean early combat attacker with Rush tempo.',
+    fieldText: '',
+    attackText: 'Clean early combat attacker.',
     defeatText: '',
     holdText: '',
     hasHold: false,
     token: false,
-    role: 'Reliable 2-cost Rush attacker that fights for board immediately.',
+    role: 'Reliable 2-cost attacker that pressures early boards.',
     artKey: 'spear_ghost',
     themeColor: 'from-lime-500/20 to-emerald-700/30 border-lime-300/50'
   },
@@ -359,14 +359,11 @@ export const BASE_CARDS: Record<string, CardDefinition> = {
 };
 
 export const COLLECTIBLE_CARD_IDS = [
-  'cat_ghost',
   'bite_ghost',
-  'flame_ghost',
   'spear_ghost',
   'soldier_ghost',
   'lantern_ghost',
   'old_ghost',
-  'sword_ghost',
   'loud_ghost',
   'bones_ghost',
   'possessor_ghost',
@@ -385,15 +382,14 @@ export function getStandardPlayerCollection(): string[] {
 export function getDefaultSelectedDeck(): string[] {
   return [
     'bite_ghost',
-    'cat_ghost',
-    'flame_ghost',
     'spear_ghost',
     'soldier_ghost',
+    'lantern_ghost',
+    'loud_ghost',
+    'bones_ghost',
     'possessor_ghost',
     'oathbreaker_ghost',
     'grave_caller',
-    'loud_ghost',
-    'bones_ghost',
     'bomb_ghost'
   ];
 }
@@ -401,15 +397,14 @@ export function getDefaultSelectedDeck(): string[] {
 export function getDefaultOpponentDeck(): string[] {
   return [
     'bite_ghost',
-    'cat_ghost',
-    'flame_ghost',
     'spear_ghost',
     'soldier_ghost',
+    'lantern_ghost',
+    'loud_ghost',
+    'bones_ghost',
     'possessor_ghost',
     'oathbreaker_ghost',
     'grave_caller',
-    'loud_ghost',
-    'fat_ghost',
     'bomb_ghost'
   ];
 }

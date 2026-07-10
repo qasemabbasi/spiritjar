@@ -15,7 +15,7 @@ interface BattleScreenProps {
 
 const STARTING_LEADER_HP = 10;
 const MAX_PSY = 10;
-const FIELD_LIMIT = 4;
+const FIELD_LIMIT = 3;
 const HAND_LIMIT = 5;
 const FLAME_BURN_AMOUNT = 2;
 const MAX_BURN = 4;
