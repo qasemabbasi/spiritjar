@@ -23,16 +23,14 @@ Spirit Jar is a single-player prototype card battler: **Player 1 vs Spirit Lord 
 
 - Bite Ghost: fragile 1-cost pressure that can slip past token-only boards.
 - Spear Ghost: clean 2-cost attacker for early board pressure.
-- Soldier Ghost: Taunt protector.
 - Lantern Ghost: Wisp generator with improved early attack.
-- Possessor Ghost: reclaims a damaged ghost Bound to you from the enemy field; Developed ghosts return ready.
-- Oathbreaker Ghost: sacrifices a ghost Bound to you from either field to damage the enemy Leader; enemy-field sacrifices hit harder and Developed sacrifices draw a card.
-- Grave Caller: returns a defeated non-Bomb ghost Bound to you from discard to hand.
-- Old Ghost: healing and bonus Psy on defeat.
+- Possessor Ghost: reclaims a damaged ghost Bound to you from the enemy field; Developed ghosts return ready with +1 ATK this turn.
+- Oathbreaker Ghost: sacrifices a ghost Bound to you from either field to damage the enemy Leader; enemy-field and Developed sacrifices hit harder, and Developed sacrifices draw a card.
+- Grave Caller: returns a defeated non-Bomb ghost Bound to you from discard to hand; Developed echoes refund 1 Psy.
 - Loud Ghost: splash and board chip.
-- Bones Ghost: Bone Pile recursion.
+- Bones Ghost: cheaper 2-cost recursion fuel with lower HP.
 - Tank Ghost: large HP wall.
-- Fog Ghost: anti-snowball Hold that cancels an attack only when you are badly outnumbered.
+- Fog Ghost: cheap Taunt blocker; draws 1 if you are badly outnumbered on Manifest.
 - Bomb Ghost: board damage, 1 damage to both Leaders, and emergency Hold blast.
 - Ritual Ghost: sacrifice payoff and revive Hold.
 
@@ -53,4 +51,4 @@ The app is a Vite + React project and can be deployed to Vercel with the default
 
 ## Active pool note
 
-Cat Ghost, Flame Ghost, and Sword Ghost were removed from the active card-select pool and default decks for this tuning pass. Their old definitions remain in code only as inactive legacy content so older saved/test state will not crash. Spear Ghost no longer uses Rush while that mechanic is being reworked.
+Cat Ghost, Flame Ghost, Sword Ghost, Soldier Ghost, and Old Ghost were removed from the active card-select pool and default decks for this tuning pass. Their old definitions remain in code only as inactive legacy content so older saved/test state will not crash. Spear Ghost no longer uses Rush while that mechanic is being reworked.

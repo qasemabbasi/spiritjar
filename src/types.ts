@@ -54,6 +54,7 @@ export interface CardInstance {
   instanceId: string;
   cardId: string;
   originalOwner: number; // 0 or 1
+  defeatedDeveloped?: boolean;
 }
 
 export interface FieldSpirit {

@@ -75,7 +75,7 @@ const KEYWORD_INFO: Record<Keyword, { label: string; color: string; desc: string
   fog: {
     label: 'FOG',
     color: 'bg-cyan-500/20 text-cyan-200 border-cyan-300/40',
-    desc: 'Cancels an enemy attack if you are badly outnumbered.'
+    desc: 'Cheap Taunt blocker. Draws when you are badly outnumbered.'
   },
   possess: {
     label: 'POSSESS',
